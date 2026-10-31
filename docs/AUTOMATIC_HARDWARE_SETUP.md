@@ -1,5 +1,7 @@
 # Automatic hardware setup — Windows 0.8 preview
 
+**Use 0.8.1 or newer.** Final installed-app testing found that Tauri's verbatim resource paths (`\\?\...`) made Windows PowerShell 5 reject the inventory script under the normal signing policy. Version 0.8.1 supplies the equivalent ordinary path to inventory and setup without changing execution policy. The original 0.8.0 release remains preserved but is superseded by this correction.
+
 Install **CineVerse Automatic Setup Preview**, open Engine settings and keep **Automatic** selected. Choose an engine drive, accept the dependency-download acknowledgment and click **Install engine automatically**. Setup detects the CPU architecture, GPU models and installed driver versions using read-only Windows inventory. It installs private Python, the selected PyTorch runtime, video tools, pinned engine code and models, then saves every path. Users need neither Python nor Git nor a compiler.
 
 The Windows installer installs the app and WebView2 when needed. First-run setup downloads the larger engine after consent; this is an online installer, not an offline bundle. Detection is local. No movie is uploaded, and installation never starts a conversion.
@@ -11,6 +13,8 @@ The Windows installer installs the app and WebView2 when needed. First-run setup
 | Intel/AMD x64 CPU without an eligible accelerated route | Private CPU-only PyTorch | Software H.264, SDR, original FPS, up to 1280 pixels per eye; slower |
 | Unsupported AMD model, old/missing driver, multiple AMD adapters or failed GPU startup | Automatic CPU installation with the reason shown | CPU limits apply; no claim of GPU acceleration |
 | Known Windows ARM / non-x64 processor | Setup stops with an architecture error | This Windows build is x64 only |
+
+The pinned NVIDIA runtime is PyTorch 2.11.0 with CUDA 12.8. Its compiled support starts at **Turing (SM 7.5)**; RTX 20/30/40/50-series are expected candidates, subject to working drivers, NVENC Main10, available memory and the live startup check. Other cards have not been individually hardware-validated by this project. GTX 10-series and older cannot use this runtime and fall back to CPU in Automatic. See [PyTorch's version-specific architecture matrix](https://dev-discuss.pytorch.org/t/dropping-volta-support-from-cuda-12-8-binaries-for-release-2-11/3290) and [NVIDIA's encoder matrix](https://developer.nvidia.com/video-encode-decode-support-matrix). No minimum-memory performance guarantee is established by a tiny startup probe.
 
 AMD CPU branding does not require ROCm. A Ryzen PC with NVIDIA can use CUDA, and a Ryzen PC without a supported GPU can use CPU PyTorch. Intel GPU acceleration, DirectML, AMF encoding and AMD RIFE/HDR are not implemented. The separate [Apple Silicon preview](MACOS.md) keeps its existing CPU/default and opt-in MPS behavior.
 

@@ -30,8 +30,24 @@ pub fn default_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
             "0.8-auto"
         }))
 }
+fn windows_shell_path(path: &Path) -> PathBuf {
+    #[cfg(windows)]
+    {
+        // PowerShell 5 treats Win32 verbatim local paths as remote scripts.
+        // Use the equivalent ordinary path; never bypass execution policy.
+        let value = path.to_string_lossy();
+        if let Some(rest) = value.strip_prefix(r"\\?\UNC\") {
+            return PathBuf::from(format!(r"\\{rest}"));
+        }
+        if let Some(rest) = value.strip_prefix(r"\\?\") {
+            return PathBuf::from(rest);
+        }
+    }
+    path.to_path_buf()
+}
 fn resources(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-    let path = app.path().resource_dir().map_err(|e| e.to_string())?;
+    // Normalize once for both the GUI inventory and its Python setup child.
+    let path = windows_shell_path(&app.path().resource_dir().map_err(|e| e.to_string())?);
     if path.join("requirements/engine-manifest.json").is_file() {
         return Ok(path);
     }
@@ -532,7 +548,9 @@ pub fn hardware_snapshot(resource: &Path) -> Result<Value, String> {
         let mut command = Command::new(powershell);
         command
             .args(["-NoProfile", "-NonInteractive", "-File"])
-            .arg(resource.join("scripts/hardware_probe.ps1"))
+            .arg(windows_shell_path(
+                &resource.join("scripts/hardware_probe.ps1"),
+            ))
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
         super::quiet(&mut command);
@@ -687,6 +705,38 @@ mod tests {
         let p = std::env::temp_dir().join(format!("cineverse-setup-{}", uuid::Uuid::new_v4()));
         fs::create_dir_all(&p).unwrap();
         p
+    }
+    #[cfg(windows)]
+    #[test]
+    fn powershell_paths_preserve_local_unc_and_ordinary_semantics() {
+        assert_eq!(
+            windows_shell_path(Path::new(r"\\?\D:\CineVerse\scripts\probe.ps1")),
+            PathBuf::from(r"D:\CineVerse\scripts\probe.ps1")
+        );
+        assert_eq!(
+            windows_shell_path(Path::new(r"\\?\UNC\server\share\probe.ps1")),
+            PathBuf::from(r"\\server\share\probe.ps1")
+        );
+        assert_eq!(
+            windows_shell_path(Path::new(r"D:\CineVerse\probe.ps1")),
+            PathBuf::from(r"D:\CineVerse\probe.ps1")
+        );
+    }
+    #[cfg(windows)]
+    #[test]
+    fn inventory_accepts_tauri_verbatim_resource_paths_without_policy_changes() {
+        let p = dir();
+        fs::create_dir(p.join("scripts")).unwrap();
+        fs::write(p.join("scripts/hardware_probe.ps1"), r#"[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); Write-Output '{"state":"detected","gpus":[]}'"#).unwrap();
+        let ordinary = hardware_snapshot(&p).unwrap();
+        let extended = p.canonicalize().unwrap();
+        assert!(extended.to_string_lossy().starts_with(r"\\?\"));
+        let from_tauri = hardware_snapshot(&extended).unwrap();
+        assert_eq!(from_tauri, ordinary);
+        // A machine's policy may reject both; it must never be overridden.
+        if ordinary["state"] == "detected" {
+            assert_eq!(from_tauri["state"], "detected");
+        }
     }
     #[test]
     fn hash_mismatch_never_executes() {

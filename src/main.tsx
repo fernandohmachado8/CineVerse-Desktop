@@ -784,7 +784,7 @@ export function App() {
             <h1>Bring depth to movie night.</h1>
             <p>Turn a 2D video into a stereo film, ready for your headset.</p>
           </div>
-          <span className="version">PREVIEW · 0.8</span>
+          <span className="version">PREVIEW · 0.8.1</span>
         </div>
         {!native && (
           <div className="notice">
