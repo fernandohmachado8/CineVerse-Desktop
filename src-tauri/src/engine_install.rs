@@ -27,7 +27,7 @@ pub fn default_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
         .join(if cfg!(target_os = "macos") {
             "0.7-macos"
         } else {
-            "0.7-hardware"
+            "0.8-auto"
         }))
 }
 fn resources(app: &tauri::AppHandle) -> Result<PathBuf, String> {
@@ -336,10 +336,10 @@ pub fn run_install(
         return Err("Automatic setup supports Windows and Apple Silicon macOS.".into());
     }
     if !(matches!(profile, "auto" | "cpu")
-        || cfg!(windows) && profile == "cuda"
+        || cfg!(windows) && matches!(profile, "cuda" | "rocm")
         || cfg!(target_os = "macos") && profile == "mps")
     {
-        return Err("Choose Automatic, CPU or NVIDIA.".into());
+        return Err("Choose Automatic, CPU, NVIDIA or experimental AMD.".into());
     }
     let manifest: Value = serde_json::from_slice(
         &fs::read(resource.join("requirements/engine-manifest.json")).map_err(|e| e.to_string())?,
@@ -516,6 +516,53 @@ pub fn setup_info(app: tauri::AppHandle) -> Result<Value, String> {
     Ok(
         json!({"defaultRoot":default_root(&app)?,"minimumGiB":if cfg!(target_os="macos"){8}else{15},"platform":if cfg!(target_os="macos"){"macos"}else{"windows"}}),
     )
+}
+
+pub fn hardware_snapshot(resource: &Path) -> Result<Value, String> {
+    #[cfg(not(windows))]
+    {
+        let _ = resource;
+        return Ok(json!({"state":"not_required","gpus":[]}));
+    }
+    #[cfg(windows)]
+    {
+        let powershell =
+            PathBuf::from(std::env::var_os("SystemRoot").ok_or("Windows directory unavailable")?)
+                .join("System32/WindowsPowerShell/v1.0/powershell.exe");
+        let mut command = Command::new(powershell);
+        command
+            .args(["-NoProfile", "-NonInteractive", "-File"])
+            .arg(resource.join("scripts/hardware_probe.ps1"))
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        super::quiet(&mut command);
+        let mut child = command.spawn().map_err(|e| e.to_string())?;
+        let began = Instant::now();
+        while child.try_wait().map_err(|e| e.to_string())?.is_none() {
+            if began.elapsed() > Duration::from_secs(30) {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Ok(
+                    json!({"state":"unavailable","gpus":[],"message":"Hardware detection timed out. Setup will use CPU compatibility."}),
+                );
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        let output = child.wait_with_output().map_err(|e| e.to_string())?;
+        if !output.status.success() {
+            return Ok(
+                json!({"state":"unavailable","gpus":[],"message":"Hardware inventory unavailable. Setup will use CPU compatibility."}),
+            );
+        }
+        serde_json::from_slice(&output.stdout).map_err(|e| e.to_string())
+    }
+}
+
+#[tauri::command]
+pub async fn hardware_info(app: tauri::AppHandle) -> Result<Value, String> {
+    tauri::async_runtime::spawn_blocking(move || hardware_snapshot(&resources(&app)?))
+        .await
+        .map_err(|e| e.to_string())?
 }
 #[tauri::command]
 pub fn install_engine(app: tauri::AppHandle, profile: String, root: String) -> Result<(), String> {

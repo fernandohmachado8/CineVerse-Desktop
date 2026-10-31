@@ -19,6 +19,10 @@ A desktop application that turns local videos into full side-by-side stereo for 
 
 ## Automatic setup preview
 
+The current `feature/automatic-hardware-setup` branch adds **CineVerse Automatic Setup Preview 0.8**: read-only CPU/GPU/driver detection, automatic private dependency setup, experimental allowlisted Radeon installation, startup checks and automatic CPU fallback. Normal users do not configure dependency paths. Windows still requires approval for the signed temperature driver/helper. **No physical AMD hardware has been tested.** See [hardware selection, AMD eligibility and verification limits](docs/AUTOMATIC_HARDWARE_SETUP.md).
+
+Earlier releases remain separate:
+
 The `feature/automatic-engine-setup` branch adds **CineVerse Setup Preview 0.6**. First launch can download its private Python, processing tools and model files, choose CPU/NVIDIA, and save all paths automatically. No Python or Git installation is required for end users. The existing working versions remain separate. See [first-run setup, driver approval and validation limits](docs/AUTOMATIC_SETUP.md).
 
 ## Apple Silicon preview
@@ -27,7 +31,7 @@ The separate `feature/macos-preview` branch adds **CineVerse Mac Preview 0.7**, 
 
 ## Compatibility preview
 
-The `feature/amd-compatibility` branch adds a separate **Hardware Preview** with a CPU route for supported Intel/AMD x64 systems and an opt-in developer ROCm path for Radeon. Automatic setup on Radeon-only PCs uses CPU processing. Radeon acceleration requires a separate official engine, matching CPU/GPU readings and physical AMD testing; it is **not hardware-validated or automatically installed**. See [AMD setup, safeguards and verification limits](docs/AMD.md).
+The earlier `feature/amd-compatibility` branch adds **Hardware Preview 0.7** with an opt-in manually prepared ROCm route. Version 0.8 extends it with automatic provisioning for a pinned AMD subset; unsupported configurations use CPU. Radeon execution and physical sensor matching remain experimental and unverified. See [AMD safeguards and the earlier manual route](docs/AMD.md).
 
 The `feature/windows-cpu-compatibility` branch adds a separate **Windows CPU compatibility preview (0.5)**. It supports SDR/original FPS without NVIDIA, software H.264 and a bounded two-processor workload; HDR and 60 FPS remain NVIDIA features. The working 0.4 baseline stays on `main`. See [profiles, setup and measured limits](docs/COMPATIBILITY.md). This is not yet certified on most PCs.
 
@@ -77,16 +81,16 @@ Install Rust MSVC, Visual Studio C++ build tools/Windows SDK and WebView2 using 
 npm ci
 npm test
 python -m unittest discover -s tests -v
-npm run tauri -- build --bundles nsis
+npm run tauri -- build --config src-tauri/tauri.auto.conf.json --bundles nsis
 ```
 
-The unsigned installer packages the interface and application adapters. GPU drivers where needed, AI Python, FFmpeg and model weights are installed separately. Building this repository does not replace the original working CineVerse installation.
+The unsigned installer packages the interface and application adapters. On first run, its automatic setup downloads private Python, the selected AI runtime, FFmpeg and model weights and saves all paths. Display drivers remain separate. Building this repository does not replace the original working CineVerse installation.
 
 ## Engine dependencies
 
 Included: **npm/Cargo lockfiles, the tested Python environment snapshot, pinned upstream commits, model/download URLs and SHA-256 hashes**, plus a setup helper. Dependencies keep their upstream licenses and are fetched into a separate directory instead of being committed as binaries.
 
-Install Windows x64 Python **3.12** and Git; the NVIDIA profile also needs a compatible NVIDIA driver. Review [dependency setup](docs/DEPENDENCIES.md) and [licenses](THIRD_PARTY_NOTICES.md). Planning downloads nothing:
+End users use automatic setup and need no Python or Git. The following optional source-based commands require Windows x64 Python **3.12**; no Git is required for the pinned source archives. Review [automatic setup](docs/AUTOMATIC_HARDWARE_SETUP.md) and [licenses](THIRD_PARTY_NOTICES.md). Planning downloads nothing:
 
 ```powershell
 py -3.12 scripts/setup_engine.py --root "D:/CineVerse" --download-models
@@ -98,7 +102,7 @@ Execute the reviewed plan:
 py -3.12 scripts/setup_engine.py --root "D:/CineVerse" --install --download-models
 ```
 
-Then choose **Locate engine folder** in the app. CPU sensing requires the official signed PawnIO driver separately and administrator approval for the read-only helper. Setup never installs drivers, changes Windows security or starts conversion. If Google Drive cannot serve RIFE, provide its verified official ZIP with `--rife-archive`.
+After manual setup choose **Locate engine folder**; the app's automatic setup selects it for you. The protection button guides missing PawnIO installation and requests approval for the read-only helper. Setup never silently installs drivers, changes Windows security or starts conversion. If Google Drive cannot serve RIFE, provide its verified official ZIP with `--rife-archive`.
 
 **Clean-machine installation has not yet been certified.** Planning, safeguards, existing-engine checks and the working PC's runtime were tested separately; see [validation](docs/VALIDATION.md).
 

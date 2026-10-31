@@ -469,6 +469,26 @@ fn open_folder(path: String) -> Result<(), String> {
 fn main() {
     // Reproducible setup-only path using the exact packaged bootstrap; no conversion.
     let args: Vec<String> = std::env::args().collect();
+    if args.get(1).map(String::as_str) == Some("--detect-hardware") {
+        let result = std::env::current_exe()
+            .map_err(|e| e.to_string())
+            .and_then(|p| {
+                p.parent()
+                    .map(|v| v.to_path_buf())
+                    .ok_or("Resource directory unavailable".into())
+            })
+            .and_then(|resource| engine_install::hardware_snapshot(&resource));
+        match result {
+            Ok(value) => {
+                println!("{value}");
+                std::process::exit(0);
+            }
+            Err(e) => {
+                eprintln!("{e}");
+                std::process::exit(1);
+            }
+        }
+    }
     if args.get(1).map(String::as_str) == Some("--setup-engine") {
         let result = (|| {
             let root = PathBuf::from(args.get(2).ok_or("Supply an empty engine folder")?);
@@ -510,6 +530,7 @@ fn main() {
         .manage(engine_install::Installer::default())
         .invoke_handler(tauri::generate_handler![
             engine_install::setup_info,
+            engine_install::hardware_info,
             engine_install::install_engine,
             engine_install::cancel_engine_setup,
             engine_install::open_cpu_driver,

@@ -22,7 +22,7 @@ def resolve(config, torch):
     if requested == 'rocm':
         if not IS_WINDOWS or IS_MAC or WINDOWS_BUILD<22000:raise ValueError('The experimental Radeon profile currently targets Windows 11 only. Use CPU compatibility on other platforms.')
         if not is_rocm(torch) or not torch.cuda.is_available():
-            raise ValueError('AMD ROCm is unavailable in this Python engine. Automatic setup supplies CPU/NVIDIA packages, not ROCm. Use CPU compatibility or prepare a separate official AMD ROCm engine; see docs/AMD.md.')
+            raise ValueError('AMD ROCm is unavailable in this Python engine. Run Automatic engine setup to detect a supported AMD recipe, or use CPU compatibility.')
         if torch.cuda.device_count()!=1:
             raise ValueError('Radeon temperature binding currently requires exactly one visible ROCm GPU. Multi-GPU systems are not validated; use CPU compatibility.')
         return 'rocm'
@@ -37,6 +37,15 @@ def resolve(config, torch):
         return 'cpu'
     if is_rocm(torch):
         if requested=='cuda':raise ValueError('This is an AMD ROCm runtime, not NVIDIA CUDA. Select experimental AMD ROCm or CPU compatibility.')
+        if config.get('managedBackend')=='rocm' and config.get('runtimeProbePassed') is True:
+            # Only a managed installation with a successful local startup probe
+            # may choose ROCm automatically. Manual legacy engines stay on CPU.
+            from amd import model_name
+            if (config.get('setupTorchVersion')==getattr(torch,'__version__',None)
+                and isinstance(config.get('setupGpuName'),str) and config['setupGpuName']
+                and torch.cuda.is_available() and torch.cuda.device_count()==1
+                and model_name(config.get('setupGpuName'))==model_name(torch.cuda.get_device_name(0))):
+                return resolve(dict(config,backend='rocm'),torch)
         return 'cpu'
     if torch.cuda.is_available(): return 'cuda'
     if requested == 'cuda':
@@ -54,8 +63,8 @@ def encoder_probe(ffmpeg, backend):
 
 def capabilities(config, torch, probe=True):
     backend = resolve(config, torch); note = None
-    if backend=='cpu' and is_rocm(torch):
-        note='AMD ROCm was detected. Automatic mode uses CPU compatibility; Radeon acceleration requires explicit experimental selection and valid CPU/Radeon sensor readings.'
+    if backend=='cpu' and is_rocm(torch) and config.get('backend','auto')=='auto':
+        note='AMD ROCm was detected without a matching managed startup record. CPU compatibility was selected; rerun Automatic setup to validate this computer.'
     if probe:
         result = encoder_probe(config['ffmpeg'], backend)
         if result.returncode and backend == 'cuda' and config.get('backend', 'auto') == 'auto':
@@ -79,7 +88,7 @@ def capabilities(config, torch, probe=True):
         result.update(gpu=name+' · AMD ROCm experimental · software encoding',
             gpuBinding=dict(name=name,deviceCount=1,hardwareType='GpuAmd'),
             hipVersion=str(torch.version.hip),
-            note='Experimental, not tested on physical AMD hardware. Requires a separate official ROCm engine and matching CPU/Radeon temperature readings. SDR/original FPS only; no NVENC, AMF or RIFE.')
+            note='Experimental AMD inference. Automatic setup can install the pinned supported recipe. Matching CPU/Radeon temperatures and a short preview are required. SDR/original FPS only; no NVENC, AMF or RIFE.')
     if backend == 'cuda':
         result['gpuUuid'] = 'GPU-' + str(torch.cuda.get_device_properties(0).uuid).removeprefix('GPU-')
     return result

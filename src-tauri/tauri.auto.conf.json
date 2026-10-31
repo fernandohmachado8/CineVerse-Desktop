@@ -1,0 +1,6 @@
+{
+  "productName": "CineVerse Automatic Setup Preview",
+  "identifier": "com.cineverse.desktop.autohardware",
+  "app": { "windows": [{ "title": "CineVerse Automatic Setup Preview", "width": 1220, "height": 860, "minWidth": 940, "minHeight": 720, "backgroundColor": "#101417" }] },
+  "bundle": { "targets": ["nsis"] }
+}

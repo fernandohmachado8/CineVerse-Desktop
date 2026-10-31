@@ -1,5 +1,7 @@
 # Intel/AMD CPU compatibility and experimental Radeon integration
 
+**Version note:** the manual instructions and 0.7 measurements below describe the preserved Hardware Preview. **Automatic Setup Preview 0.8 now provisions a pinned official AMD runtime for an allowlisted subset, validates startup and falls back to CPU.** Use the [current automatic setup guide](AUTOMATIC_HARDWARE_SETUP.md) for the new installer. The statements below about an AMD runtime not being downloaded/pinned apply to 0.7 only. Physical AMD execution remains untested in both versions.
+
 This branch provides a separate **CineVerse Hardware Preview** for Windows x64. Existing Windows and Mac releases remain unchanged. No AMD computer was available during development: **AMD CPU inference, Radeon inference and physical AMD temperature readings have not been verified**. Simulated device/sensor tests are explicitly separate from real hardware results.
 
 ## Profiles

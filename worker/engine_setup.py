@@ -32,6 +32,9 @@ def discover(current, roots):
                 saved = json.loads(manifest.read_text(encoding='utf-8-sig'))
                 for key in LABELS: accept(key, saved.get(key))
                 if not result.get('backend') and saved.get('backend') in ('auto','cpu','cuda','mps','rocm'): result['backend'] = saved['backend']
+                if result.get('python')==saved.get('python'):
+                    for key in ('managedBackend','runtimeProbePassed','setupTorchVersion','setupGpuName','setupRecipeVersion'):
+                        if key in saved:result[key]=saved[key]
                 if not result.get('outputDir') and saved.get('outputDir'): result['outputDir'] = saved['outputDir']
             except (OSError, ValueError, TypeError): pass
         patterns = {'python': ['environments/*/Scripts/python.exe', 'runtime/python*/python.exe'],
