@@ -1,0 +1,10 @@
+{
+  "testedDate": "2026-10-31",
+  "rustc": "1.99.1",
+  "target": "x86_64-pc-windows-msvc",
+  "node": "24.15.0",
+  "npm": "11.12.1",
+  "ciNode": "22",
+  "python": "3.12.14",
+  "notes": "Measured local build profile, not a compiler or driver installer. Rust crates and JavaScript dependencies use committed lockfiles."
+}

@@ -1,0 +1,3 @@
+# Desktop Python unit tests use only the Python standard library.
+# Synthetic asset regeneration (optional):
+Pillow==12.3.0

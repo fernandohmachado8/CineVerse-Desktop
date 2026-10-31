@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 1,
+  "testedDate": "2026-10-31",
+  "platform": "Windows x86-64",
+  "python": "3.12",
+  "torch": "2.11.0+cu128",
+  "torchvision": "0.26.0+cu128",
+  "torchIndex": "https://download.pytorch.org/whl/cu128",
+  "repositories": [
+    {
+      "name": "iw3",
+      "url": "https://github.com/nagadomi/nunif.git",
+      "commit": "0d3d92c8f4396da564c44524b6390ee5c76b9668",
+      "directory": "tools/nunif-iw3"
+    },
+    {
+      "name": "rife",
+      "url": "https://github.com/hzwer/Practical-RIFE.git",
+      "commit": "bbfd2ea90910789a860ea3e2b32a240cd577b75e",
+      "directory": "tools/Practical-RIFE"
+    },
+    {
+      "name": "depth-hub",
+      "url": "https://github.com/nagadomi/Depth-Anything_iw3.git",
+      "commit": "92eaac92bcc2c275f48c1f866ec708861055e435",
+      "directory": "iw3-trial/cache/iw3/pretrained_models/hub/nagadomi_Depth-Anything_iw3_main"
+    }
+  ],
+  "ffmpeg": {
+    "url": "https://github.com/GyanD/codexffmpeg/releases/download/9.0.2/ffmpeg-9.0.2-essentials_build.zip",
+    "sha256": "60f467265b1e312373dbcd92200c2618a74850f98d3d078e94296bb3fa2047ba",
+    "version": "9.0.2",
+    "license": "GPLv3 build; retain the archive notices and source links"
+  },
+  "sensor": {
+    "url": "https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/releases/download/v0.9.6/LibreHardwareMonitor.zip",
+    "sha256": "086d9f1b5a99e643edc2cfaaac16051685b551e4c5ac0b32a57c58c0e529c001",
+    "version": "0.9.6",
+    "license": "MPL-2.0 library plus upstream third-party notices"
+  },
+  "rifeModel": {
+    "url": "https://drive.google.com/uc?id=1ZKjcbmt1hypiFprJPIKW0Tt0lr_2i7bg",
+    "sha256": "e63d481b7ae5d4a4e6ad7ac5b410ff78f3bf7be3b51b2e38ca8152747abde5b4",
+    "weightSha256": "6615790efd627772917205db291f51cd392528a157ecbb2ecaeec3bff8eb6de2",
+    "version": "4.25",
+    "licenseSource": "https://github.com/hzwer/Practical-RIFE#trained-model",
+    "hashSource": "locally verified official Google Drive archive"
+  },
+  "models": [
+    {
+      "name": "iw3_light_inpaint_v1_20250919.pth",
+      "url": "https://github.com/nagadomi/nunif/releases/download/0.0.0/iw3_light_inpaint_v1_20250919.pth",
+      "sha256": "8b1a85df321ede3ea45d0b37a7f2c509e941687c062e1d584aab8808c253db6d",
+      "hashSource": "GitHub release digest",
+      "licenseSource": "https://github.com/nagadomi/nunif/tree/0d3d92c8f4396da564c44524b6390ee5c76b9668/iw3"
+    },
+    {
+      "name": "iw3_light_video_inpaint_v1_20250919.pth",
+      "url": "https://github.com/nagadomi/nunif/releases/download/0.0.0/iw3_light_video_inpaint_v1_20250919.pth",
+      "sha256": "788e13a77f4ace05c76bfcd6577b15e9ca220cbb3f9c43d3f14510dc15cb9aae",
+      "hashSource": "GitHub release digest",
+      "licenseSource": "https://github.com/nagadomi/nunif/tree/0d3d92c8f4396da564c44524b6390ee5c76b9668/iw3"
+    },
+    {
+      "name": "iw3_depth_aa_20250530.pth",
+      "url": "https://github.com/nagadomi/nunif/releases/download/0.0.0/iw3_depth_aa_20250530.pth",
+      "sha256": "5a36c8ebfdde78b60784535b9cd77016cd617faab42228dfa9ae17b657ab9c18",
+      "hashSource": "GitHub release digest",
+      "licenseSource": "https://github.com/nagadomi/nunif/tree/0d3d92c8f4396da564c44524b6390ee5c76b9668/iw3"
+    },
+    {
+      "name": "iw3_row_flow_v3_20250627.pth",
+      "url": "https://github.com/nagadomi/nunif/releases/download/0.0.0/iw3_row_flow_v3_20250627.pth",
+      "sha256": "2e4daa14a72a5f751ffff489c1809ce2c4c6aea6191d47f67f2f72afe4ef612a",
+      "hashSource": "GitHub release digest",
+      "licenseSource": "https://github.com/nagadomi/nunif/tree/0d3d92c8f4396da564c44524b6390ee5c76b9668/iw3"
+    },
+    {
+      "name": "transnetv2-pytorch-weights.pth",
+      "url": "https://github.com/nagadomi/nunif/releases/download/0.0.0/transnetv2-pytorch-weights.pth",
+      "sha256": "5e896c007888ae67761a2c673cfe0f2f3745b28e580631589696a7b665a442d0",
+      "hashSource": "locally verified official download",
+      "licenseSource": "https://github.com/nagadomi/nunif/tree/0d3d92c8f4396da564c44524b6390ee5c76b9668/iw3"
+    },
+    {
+      "name": "depth_anything_v2_vits.pth",
+      "url": "https://huggingface.co/depth-anything/Depth-Anything-V2-Small/resolve/main/depth_anything_v2_vits.pth",
+      "sha256": "715fade13be8f229f8a70cc02066f656f2423a59effd0579197bbf57860e1378",
+      "hashSource": "locally verified official download",
+      "licenseSource": "https://huggingface.co/depth-anything/Depth-Anything-V2-Small"
+    }
+  ]
+}

@@ -1,0 +1,55 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "CineVerse Desktop",
+  "version": "0.4.0",
+  "identifier": "com.cineverse.desktop",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:5190",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "CineVerse Desktop",
+        "width": 1220,
+        "height": 860,
+        "minWidth": 940,
+        "minHeight": 720,
+        "backgroundColor": "#101417"
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost; img-src 'self' asset: http://asset.localhost data:; media-src 'self' asset: http://asset.localhost; style-src 'self' 'unsafe-inline'",
+      "assetProtocol": {
+        "enable": true,
+        "scope": []
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "nsis"
+    ],
+    "resources": {
+      "../worker/hdr_sei.py": "worker/hdr_sei.py",
+      "../worker/hdr_trial.py": "worker/hdr_trial.py",
+      "../worker/interpolate_hdr_rife.py": "worker/interpolate_hdr_rife.py",
+      "../worker/interpolate_rife.py": "worker/interpolate_rife.py",
+      "../worker/iw3_export.py": "worker/iw3_export.py",
+      "../worker/pipeline.py": "worker/pipeline.py",
+      "../worker/worker.py": "worker/worker.py",
+      "../worker/protection.py": "worker/protection.py",
+      "../worker/engine_setup.py": "worker/engine_setup.py",
+      "../worker/cpu_session.ps1": "worker/cpu_session.ps1",
+      "../thermal/thermal_guard.py": "thermal/thermal_guard.py"
+    },
+    "shortDescription": "Local 2D to stereoscopic movie conversion",
+    "category": "Video",
+    "icon": [
+      "icons/icon.ico"
+    ]
+  }
+}

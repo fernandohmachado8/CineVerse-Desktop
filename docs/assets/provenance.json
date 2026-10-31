@@ -1,0 +1,22 @@
+{
+  "assets": {
+    "synthetic-preview.gif": {
+      "sha256": "90ddce901cc5a10799f907b4191b7cd8f655440b4f82a69f71f08aeb98f461f5",
+      "source": "examples/generate_fixture.py",
+      "content": "original analytical geometry; not AI output or film footage",
+      "license": "MIT"
+    },
+    "synthetic-frame.png": {
+      "sha256": "908096ae09ec97c6a20ca9898292a3578b079ff67830a5f49121de667800d7be",
+      "source": "examples/generate_fixture.py",
+      "content": "original analytical geometry; not AI output or film footage",
+      "license": "MIT"
+    },
+    "interface-preview.png": {
+      "sha256": "64e9445694ccf69a2ecbe5290e6dd7e4159f1b0ea0044d1088d4cb67330c7dba",
+      "source": "React interface rendered in browser preview; captured from localhost",
+      "content": "actual interface screenshot with no media, paths, account data or GPU job; native conversion disabled",
+      "license": "application MIT plus attributed UI dependencies"
+    }
+  }
+}

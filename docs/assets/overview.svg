@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="320" viewBox="0 0 1200 320" role="img" aria-labelledby="title desc">
+<title id="title">CineVerse Desktop pipeline overview</title><desc id="desc">A local source video flows through stereo depth and optional motion interpolation to a verified SBS export, with independent temperature supervision.</desc>
+<defs><linearGradient id="bg" x2="1" y2="1"><stop stop-color="#102222"/><stop offset="1" stop-color="#101417"/></linearGradient></defs>
+<rect width="1200" height="320" rx="20" fill="url(#bg)"/>
+<g font-family="Segoe UI,Arial,sans-serif"><text x="40" y="43" fill="#b8debf" font-size="12" letter-spacing="3">CINEVERSE DESKTOP · PIPELINE OVERVIEW</text>
+<text x="40" y="84" fill="#eef4ef" font-size="30">Another dimension. Processed locally.</text>
+<g fill="#17272a" stroke="#3b5850"><rect x="40" y="114" width="330" height="140" rx="12"/><rect x="435" y="114" width="330" height="140" rx="12"/><rect x="830" y="114" width="330" height="140" rx="12"/></g>
+<g fill="#c3e4c8" font-size="18"><text x="62" y="149">01  Source video</text><text x="457" y="149">02  Depth + motion</text><text x="852" y="149">03  Verified SBS</text></g>
+<g fill="#a8bbb0" font-size="14"><text x="62" y="184">Local input · bounded previews</text><text x="62" y="209">HDR10 or SDR · source timing</text><text x="457" y="184">iw3 stereo · neural gap filling</text><text x="457" y="209">Optional RIFE 60 FPS · NVENC</text><text x="852" y="184">Frame, timestamp and audio checks</text><text x="852" y="209">Left eye first · VR cinema playback</text></g>
+<g fill="none" stroke="#a9cfb4" stroke-width="2"><path d="M385 184h32m-9-7 9 7-9 7"/><path d="M780 184h32m-9-7 9 7-9 7"/></g>
+<text x="40" y="288" fill="#a8cbb2" font-size="14">CPU/GPU supervision</text><text x="257" y="288" fill="#8fa59a" font-size="14">Independent process control · atomic checkpoints · manual recovery</text></g></svg>
