@@ -12,6 +12,8 @@ The first attempt took 182.384 seconds and stopped at a Windows source-ZIP path-
 
 The native first-run UI was then exercised: CPU package, engine drive selection, download consent and **Install engine automatically**. It reused the verified engine, saved every path, closed the setup dialog and selected CPU/original-FPS mode. Saved settings were checked; no sensor session was persisted and no movie conversion was triggered by setup. Both previous installed application hashes remained unchanged.
 
+A three-second 640x360/24 FPS synthetic preview ran through the packaged worker with this newly installed CPU engine in **156.875 seconds**. All **72 frames** verified, with zero timestamp-grid error, preserved prepared audio, passed source integrity/detail checks and 12-row top/bottom compatibility margins. It recorded 75 valid active CPU samples at 73.0-92.0 C. This was a CLI-supervised preview; the native buttons were used for setup, not for this conversion. [Machine-readable evidence](automatic-setup-benchmark.json) omits private paths.
+
 This workstation already had WebView2, Windows runtime components and an approved PawnIO driver. A completely clean Windows VM, absent WebView2/driver paths and a fresh CUDA/RIFE installation are not yet certified. The private CPU environment and download/install flow are distinct from broad hardware certification. No film data was used in setup or published.
 
 ## Local checks — 0.5 compatibility preview
