@@ -70,15 +70,8 @@ def check(config, gpu=True):
               and (Path(config.get('rifeRepo', '')) / 'model/pytorch_msssim').is_dir()}
     if gpu:
         import torch
-        if not torch.cuda.is_available():
-            raise ValueError('CUDA GPU unavailable. Use a Python environment with CUDA-enabled PyTorch and a supported NVIDIA driver.')
-        result.update(gpu=torch.cuda.get_device_name(0), torch=torch.__version__,
-                      gpuUuid='GPU-'+str(torch.cuda.get_device_properties(0).uuid).removeprefix('GPU-'))
-        test=subprocess.run([config['ffmpeg'],'-v','error','-f','lavfi','-i','color=black:s=256x256:d=0.05',
-            '-vf','format=p010le','-c:v','hevc_nvenc','-profile:v','main10','-f','null','-'],
-            capture_output=True,text=True,creationflags=FLAGS,timeout=45)
-        if test.returncode:raise ValueError('NVENC Main10 is unavailable. Check NVIDIA driver and FFmpeg. '+test.stderr[-1000:])
-        result['nvencReady']=True
+        from hardware import capabilities
+        result.update(capabilities(config, torch), torch=torch.__version__)
     return result
 
 
@@ -183,6 +176,11 @@ if __name__=='__main__':
             supervise(config,request,emit)
         elif sys.argv[1]=='convert':
             # Internal child of the independent thermal supervisor, not a UI command.
+            if config.get('resolvedBackend') == 'cpu' or config.get('backend') == 'cpu':
+                from protection import limit_cpu_process
+                # Windows venv launchers may spawn the real interpreter before
+                # the supervisor applies affinity. Reapply inside that interpreter.
+                limit_cpu_process()
             from pipeline import run
             run(config,request)
         elif sys.argv[1]=='thermal':

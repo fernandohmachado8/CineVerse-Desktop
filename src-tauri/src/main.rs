@@ -123,7 +123,7 @@ fn discover(
         .as_str()
         .is_some_and(|p| PathBuf::from(p).is_file())
     {
-        return Err("No installed CUDA Python found. Select the CineVerse engine folder, or use Advanced paths. This installer does not download the AI engine.".into());
+        return Err("No installed AI Python found. Select the CineVerse engine folder, or use Advanced paths. This installer does not download the AI engine.".into());
     }
     run_short(app, "discover", settings, json!({"roots":roots}))
 }

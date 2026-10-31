@@ -2,21 +2,43 @@
 
 This standalone repository extracts the desktop converter from the larger CineVerse workspace. The existing application, source repository and movie exports were left intact. Evidence below separates source checks, native hardware runs and untested deployment claims.
 
-## Local checks
+## Local checks — 0.5 compatibility preview
 
 | Check | Evidence |
 |---|---|
-| Desktop Python tests | 37 passed, including Windows disposable-process stop/cleanup tests |
-| Distribution helper tests | 6 passed: pinned assets, side-effect-free plan, traversal/symlink refusal, good archive extraction, bad hash refusal and cached hash reuse |
-| React tests | 14 passed for preview/full separation, presets, cancellation/errors, sensor gating, helper activation and setup |
-| Legacy thermal tests | 14 passed on Windows; disposable targets only |
-| Dependency installation | `npm ci` succeeds with no reported vulnerabilities; formatting checks pass; Python snapshot wheel availability checked with pip dry-run, not a fresh full-engine install |
-| Engine plan/check | Plan emits pins without installing; existing configured RTX 4090 engine passes CUDA/neural/RIFE and synthetic NVENC checks |
-| TypeScript/Vite | Production build checked locally |
-| Windows binary | Standalone Rust MSVC/NSIS 0.4.0 build passed locally; installed original app was not replaced |
-| Publication | Git-index audit rejects private paths/tokens, unregistered binary assets, weights and local settings |
+| Python worker/setup/protection/distribution | 52 passed, including backend selection/fallback, unsupported-mode refusal, CPU sensor requirements, checkpoint backend identity and real Windows process affinity |
+| React | 18 passed, including CPU controls, HDR/60 FPS gating and delayed startup detection before planning |
+| Legacy watchdog | 14 passed on Windows, using disposable processes |
+| CPU Python environment | Fresh venv with official PyTorch 2.11.0+cpu / torchvision 0.26.0+cpu and the pinned package snapshot; CUDA unavailable; `pip check` passes |
+| TypeScript/Vite and formatting | Production build and formatting checks pass |
+| Windows package | Rust MSVC/NSIS 0.5.0 Compatibility Preview built separately; 0.4 installed executable SHA-256 unchanged |
+| Publication | Git-index audit checks private paths/tokens, unregistered binary assets, weights and settings |
 
-**71 tests total** in the standalone local suite: 43 Python tests, 14 React tests and 14 Windows legacy watchdog tests. Linux CI skips the three Windows-only process tests; the Windows job runs them. CI does not have the test machine's CUDA GPU or CPU sensor.
+**84 tests total:** 52 Python, 18 React and 14 legacy thermal tests. Linux skips five Windows-only disposable-process tests. CI verifies source/UI behavior without CUDA inference or live CPU sensors. Historical 0.4 validation had 71 tests.
+
+## Measured CPU-only run and GPU regression
+
+The same generated FFmpeg test pattern with sine audio (640x360, 24 FPS, three seconds) was converted at strength 1.5 using neural gap filling and Original FPS. No movie was used in these compatibility tests. Machine: Windows x64, Intel i9-14900KF; an RTX 4090 is physically installed but the CPU test used a separate **CPU-only PyTorch build**, hid CUDA from the worker, selected `--gpu -1`, and used software H.264.
+
+| Measurement | CPU compatibility | NVIDIA regression |
+|---|---|---|
+| End-to-end wall time | 160.531 seconds | 17.360 seconds |
+| Verified frames / FPS | 72 / 24 | 72 / 24 |
+| Output dimensions | 1280x384 full SBS, including margins | 1280x384 full SBS, including margins |
+| PTS first / last | 0 / 2.9583333333 seconds | Same |
+| Timestamp grid error | Zero | Zero |
+| Prepared audio / source integrity | Passed | Passed |
+| Source-eye sampled luma MAE | 0.525-0.550 on an 8-bit scale | 0.171-0.199 |
+| Top / bottom margin | 12 rows each; no image pixels removed | Same |
+| Active thermal samples | 77 valid; CPU 62-93 C, GPU not queried | 7 valid; CPU 79-85 C, GPU 45.68-58.27 C |
+
+[Machine-readable measurements](compatibility-benchmark.json) omit private paths. Source-eye comparisons are against the prepared resized/reencoded reference, not a claim of bit-exact original pixels or correct inferred depth. This simple pattern verifies the pipeline, timing and encoding; it does not establish photographic depth quality, sustained load, VR comfort or laptop speed. The configured 1280-pixel-per-eye cap was not separately benchmarked at that maximum input size.
+
+An earlier CPU attempt used library thread limits without a process-tree affinity budget. It reached the **100 C immediate cutoff after 48.109 seconds**, and the supervisor stopped conversion with no completed export. The machine was not deliberately overheated. The subsequent successful run applies a two-logical-processor budget inherited by decoder/encoder/inference descendants. Cutoffs were not raised or disabled.
+
+Fresh CPU wheels/packages were installed, but iw3/checkpoints/FFmpeg and PawnIO/sensor files came from the already configured workstation. A complete installer run on a clean non-NVIDIA PC remains unverified. The NVIDIA regression is SDR/original FPS; the HDR/60 FPS evidence below belongs to the preserved 0.4 baseline.
+
+Native startup was inspected separately. CPU mode shows software encoding, the 1280 limit, disabled smoothing, GPU “Not used” and blocked conversion before CPU readings. Inspection exposed an initial planning race while CPU detection was loading; planning now waits for engine readiness, with a delayed-detection regression test. No full-movie job was started.
 
 ## Measured native behavior
 
@@ -52,6 +74,6 @@ This is a directly rendered analytical stereo fixture, **not an AI conversion re
 
 ## Limits and remaining work
 
-A new clean Windows machine, unattended overnight operation, other CPU/GPU models, whole-film neural visual quality, VR comfort and every scene cut have not been certified. The dependency helper's safeguards and existing-engine check are tested; a complete fresh dependency install is not claimed. Native inference tests are distinct from CPU-only CI. Temperature cutoffs are simulated in disposable-process tests; hardware is not deliberately overheated. Software polling cannot guarantee hardware safety or monitor GPU VRAM/hotspot temperatures.
+A new clean Windows machine, unattended overnight operation, other CPU/GPU models, whole-film neural visual quality, VR comfort and every scene cut have not been certified. The dependency helper's safeguards and existing-engine check are tested; a complete fresh dependency install is not claimed. Native inference tests are distinct from CPU-only CI. Temperature fault injection uses disposable processes; the real CPU cutoff observed during compatibility testing is documented above. Hardware is not deliberately overheated. Software polling cannot guarantee hardware safety or monitor GPU VRAM/hotspot temperatures.
 
 The project is an experimental portfolio application with measured capabilities and explicit limits, not a production certification or a new model-research claim.

@@ -1,4 +1,4 @@
-# Tested Windows CPython 3.12 engine snapshot. Install CUDA wheels first.
+# Tested Windows CPython 3.12 engine snapshot. Install the selected CPU or CUDA wheels first.
 addict==2.4.0
 annotated-doc==0.0.5
 annotated-types==0.8.0

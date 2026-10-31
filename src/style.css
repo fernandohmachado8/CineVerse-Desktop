@@ -843,3 +843,18 @@ footer i {
 .modal .warning {
   color: #edbd91;
 }
+
+.processing-profile {
+  margin-bottom: 22px;
+  padding: 16px 20px;
+  border: 1px solid #3b5347;
+  background: #14211e;
+  border-radius: 10px;
+}
+.processing-profile label {
+  font-size: 12px;
+  margin-right: 16px;
+}
+.processing-profile select {
+  min-width: 320px;
+}

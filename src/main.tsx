@@ -36,6 +36,7 @@ type Settings = {
   sensorLibrary?: string;
   cpuSensorFile?: string;
   thermalMode?: "required" | "gpu";
+  backend?: "auto" | "cuda" | "cpu";
 };
 type Media = {
   path: string;
@@ -50,8 +51,8 @@ type Plan = {
   spaceBudgetBytes: number;
   freeBytes: number;
   enoughSpace: boolean;
-  estimatedSecondsLow: number;
-  estimatedSecondsHigh: number;
+  estimatedSecondsLow: number | null;
+  estimatedSecondsHigh: number | null;
   outputEstimateBytesLow: number;
   outputEstimateBytesHigh: number;
 };
@@ -70,6 +71,12 @@ type Engine = {
   rifeReady: boolean;
   neuralReady?: boolean;
   gpuUuid?: string;
+  backend?: "cuda" | "cpu";
+  supportsHDR?: boolean;
+  supports60?: boolean;
+  maxWidth?: number;
+  codec?: string;
+  note?: string;
 };
 type Thermal = {
   ready: boolean;
@@ -78,7 +85,12 @@ type Thermal = {
   cpu: { state: string; c?: number; message?: string };
   gpu: { state: string; c?: number; message?: string };
 };
-type Component = { key: string; label: string; found: boolean };
+type Component = {
+  key: string;
+  label: string;
+  found: boolean;
+  optional?: boolean;
+};
 type StereoMethod = "forward_inpaint" | "row_flow_v3";
 type Progress = {
   type: string;
@@ -151,7 +163,10 @@ export function App() {
     setChecking(true);
     setEngine(null);
     try {
-      setEngine(await invoke("check_engine", { settings: s }));
+      const info = await invoke<Engine>("check_engine", { settings: s });
+      setEngine(info);
+      setThermal(null);
+      if (info.backend === "cpu") setFpsMode("original");
       return true;
     } catch (e) {
       setFailure(e);
@@ -244,12 +259,12 @@ export function App() {
       .catch(setFailure);
   }, [settings.outputDir, busy]);
   useEffect(() => {
-    if (!media || !settings.outputDir || busy) return;
+    if (!media || !settings.outputDir || busy || !engine?.ready) return;
     let current = true;
     setPlan(null);
     const timer = setTimeout(() => {
       invoke<Plan>("plan_conversion", {
-        settings,
+        settings: { ...settings, resolvedBackend: engine?.backend },
         request: {
           source: media.path,
           outputDir: settings.outputDir,
@@ -270,14 +285,27 @@ export function App() {
       current = false;
       clearTimeout(timer);
     };
-  }, [media?.path, settings.outputDir, strength, stereoMethod, fpsMode, busy]);
+  }, [
+    media?.path,
+    settings.outputDir,
+    strength,
+    stereoMethod,
+    fpsMode,
+    engine?.backend,
+    engine?.ready,
+    busy,
+  ]);
   useEffect(() => {
-    if (!native || !engine?.gpuUuid || busy) return;
+    if (!native || !engine?.ready || busy) return;
     let active = true;
     async function poll() {
       try {
         const t = await invoke<Thermal>("thermal_status", {
-          settings: { ...settings, gpuUuid: engine!.gpuUuid },
+          settings: {
+            ...settings,
+            gpuUuid: engine!.gpuUuid,
+            resolvedBackend: engine!.backend,
+          },
         });
         if (active) setThermal(t);
       } catch (e) {
@@ -290,7 +318,13 @@ export function App() {
       active = false;
       clearInterval(timer);
     };
-  }, [engine?.gpuUuid, settings.cpuSensorFile, settings.thermalMode, busy]);
+  }, [
+    engine?.gpuUuid,
+    engine?.backend,
+    settings.cpuSensorFile,
+    settings.thermalMode,
+    busy,
+  ]);
   async function enableSensor() {
     setSensorStarting(true);
     setError("");
@@ -348,6 +382,18 @@ export function App() {
       setFailure(e);
     }
   }
+  async function changeBackend(value: "auto" | "cuda" | "cpu") {
+    const next = { ...settings, backend: value };
+    setSettings(next);
+    setThermal(null);
+    setError("");
+    try {
+      await invoke("save_settings", { settings: next });
+      await check(next);
+    } catch (e) {
+      setFailure(e);
+    }
+  }
   async function browseVideo() {
     try {
       const selected = await open({
@@ -394,7 +440,11 @@ export function App() {
     setNow(Date.now());
     try {
       await invoke("start_job", {
-        settings: { ...settings, gpuUuid: engine?.gpuUuid },
+        settings: {
+          ...settings,
+          gpuUuid: engine?.gpuUuid,
+          resolvedBackend: engine?.backend,
+        },
         request: {
           source: media.path,
           outputDir: settings.outputDir,
@@ -424,7 +474,11 @@ export function App() {
     setNow(Date.now());
     try {
       await invoke("start_job", {
-        settings: { ...settings, gpuUuid: engine?.gpuUuid },
+        settings: {
+          ...settings,
+          gpuUuid: engine?.gpuUuid,
+          resolvedBackend: engine?.backend,
+        },
         request: { ...job.request, resumeJob: job.path },
       });
     } catch (e) {
@@ -466,7 +520,8 @@ export function App() {
     !!settings.outputDir &&
     !busy &&
     !probing &&
-    (fpsMode !== "60" || engine.rifeReady) &&
+    (fpsMode !== "60" || (engine.rifeReady && engine.supports60 !== false)) &&
+    (!media.hdr || engine.supportsHDR !== false) &&
     (stereoMethod !== "forward_inpaint" || engine.neuralReady !== false);
   const fullReady = ready && !!plan?.enoughSpace;
   const playerPath = view === "sbs" ? result?.output : media?.path;
@@ -504,12 +559,12 @@ export function App() {
             <h1>Bring depth to movie night.</h1>
             <p>Turn a 2D video into a stereo film, ready for your headset.</p>
           </div>
-          <span className="version">EARLY ACCESS · 0.4</span>
+          <span className="version">COMPATIBILITY PREVIEW · 0.5</span>
         </div>
         {!native && (
           <div className="notice">
             Interface preview only. Open CineVerse Desktop to choose local files
-            and run GPU conversions.
+            and run local conversions.
           </div>
         )}
         {error && (
@@ -524,6 +579,34 @@ export function App() {
             </button>
           </div>
         )}
+        <section className="processing-profile" aria-label="Processing profile">
+          <label htmlFor="processing-backend">Processing</label>
+          <select
+            id="processing-backend"
+            aria-label="Processing backend"
+            value={settings.backend || "auto"}
+            disabled={!native || busy || checking}
+            onChange={(e) =>
+              void changeBackend(e.target.value as "auto" | "cuda" | "cpu")
+            }
+          >
+            <option value="auto">Automatic · detect this PC</option>
+            <option value="cuda">NVIDIA CUDA · HDR + 60 FPS</option>
+            <option value="cpu">CPU compatibility · SDR / original FPS</option>
+          </select>
+          <p className="hint">
+            {engine?.backend === "cpu"
+              ? "CPU mode uses software H.264, up to 1280 pixels per eye, original FPS and CPU temperature protection. Work is limited to two logical CPU cores and can be much slower than a GPU."
+              : "NVIDIA mode retains HDR10, optional RIFE smoothing and GPU encoding when supported."}
+          </p>
+          {engine?.note && <p className="warning">{engine.note}</p>}
+          {media?.hdr && engine?.supportsHDR === false && (
+            <p className="warning">
+              CPU compatibility supports SDR input only. Choose an SDR source or
+              NVIDIA mode; HDR is not converted to SDR automatically.
+            </p>
+          )}
+        </section>
         <div className="workspace">
           <section className="setup">
             <div className="section-heading">
@@ -577,9 +660,11 @@ export function App() {
             {media && (
               <p className="source-format">
                 {media.hdr
-                  ? "HDR10 is preserved · 10-bit HEVC"
+                  ? engine?.supportsHDR === false
+                    ? "HDR10 requires NVIDIA mode"
+                    : "HDR10 is preserved · 10-bit HEVC"
                   : "SDR source · H.264 export"}{" "}
-                · NVIDIA NVENC
+                · {engine?.codec || "NVIDIA NVENC"}
               </p>
             )}
             <div className="section-heading">
@@ -653,7 +738,7 @@ export function App() {
               <button
                 aria-pressed={fpsMode === "60"}
                 className={fpsMode === "60" ? "active" : ""}
-                disabled={busy}
+                disabled={busy || engine?.supports60 === false}
                 onClick={() => setFpsMode("60")}
               >
                 Smooth 60 FPS
@@ -690,7 +775,8 @@ export function App() {
               <span>MP4 · AAC stereo</span>
             </div>
             <p className="hint">
-              Up to 1920 pixels per eye. First audio track; subtitles omitted.
+              Up to {engine?.maxWidth || 1920} pixels per eye. First audio
+              track; subtitles omitted.
             </p>
             <p className="safety">
               <ShieldCheck size={15} /> Your original file stays untouched.
@@ -704,8 +790,15 @@ export function App() {
                   free
                 </p>
                 <p>
-                  About {duration(plan.estimatedSecondsLow)}–
-                  {duration(plan.estimatedSecondsHigh)} processing time
+                  {plan.estimatedSecondsLow != null &&
+                  plan.estimatedSecondsHigh != null ? (
+                    <>
+                      About {duration(plan.estimatedSecondsLow)}–
+                      {duration(plan.estimatedSecondsHigh)} processing time
+                    </>
+                  ) : (
+                    "Run a short preview to measure this CPU. Whole-video processing time is not yet estimated."
+                  )}
                 </p>
                 <p>
                   Estimated export{" "}
@@ -846,26 +939,37 @@ export function App() {
                   <b>
                     {thermal?.gpu?.c != null
                       ? `${thermal.gpu.c.toFixed(0)} °C`
-                      : "Unavailable"}
+                      : engine?.backend === "cpu"
+                        ? "Not used"
+                        : "Unavailable"}
                   </b>
                 </span>
               </div>
-              <label className="field-label" htmlFor="thermal-mode">
-                Required sensors
-              </label>
-              <select
-                id="thermal-mode"
-                aria-label="Required temperature sensors"
-                disabled={busy}
-                value={settings.thermalMode || "required"}
-                onChange={(e) =>
-                  void protectionMode(e.target.value as "required" | "gpu")
-                }
-              >
-                <option value="required">CPU + GPU · recommended</option>
-                <option value="gpu">GPU only · CPU unmonitored</option>
-              </select>
-              {settings.thermalMode === "gpu" && (
+              {engine?.backend === "cpu" ? (
+                <p className="hint">
+                  CPU protection is required. The GPU is not used or monitored
+                  in this profile.
+                </p>
+              ) : (
+                <>
+                  <label className="field-label" htmlFor="thermal-mode">
+                    Required sensors
+                  </label>
+                  <select
+                    id="thermal-mode"
+                    aria-label="Required temperature sensors"
+                    disabled={busy}
+                    value={settings.thermalMode || "required"}
+                    onChange={(e) =>
+                      void protectionMode(e.target.value as "required" | "gpu")
+                    }
+                  >
+                    <option value="required">CPU + GPU · recommended</option>
+                    <option value="gpu">GPU only · CPU unmonitored</option>
+                  </select>
+                </>
+              )}
+              {engine?.backend !== "cpu" && settings.thermalMode === "gpu" && (
                 <p className="warning">
                   CPU temperature is not protected in GPU-only mode.
                 </p>
@@ -897,15 +1001,16 @@ export function App() {
                 <p className="warning">
                   Conversion is blocked until required readings are available
                   and below the immediate cutoffs.{" "}
-                  {(settings.thermalMode === "gpu"
+                  {(settings.thermalMode === "gpu" && engine?.backend !== "cpu"
                     ? thermal?.gpu?.message
                     : thermal?.cpu?.message || thermal?.gpu?.message) ||
                     "Check the engine and enable the CPU sensor."}
                 </p>
               )}
               <p className="hint">
-                Checks GPU core temperature, not VRAM or hotspot. Software
-                protection cannot guarantee hardware safety.
+                {engine?.backend === "cpu"
+                  ? "CPU sensing requires supported package/core sensors. Software protection cannot guarantee hardware safety."
+                  : "Checks GPU core temperature, not VRAM or hotspot. Software protection cannot guarantee hardware safety."}
               </p>
             </section>
             <div className="job-panel" aria-live="polite">
@@ -1058,7 +1163,10 @@ export function App() {
               : engine?.gpu || "Engine not configured"}
           </span>
           <span>
-            Powered by iw3 + RIFE <i>·</i> No cloud upload
+            {engine?.backend === "cpu"
+              ? "Powered by iw3"
+              : "Powered by iw3 + RIFE"}{" "}
+            <i>·</i> No cloud upload
           </span>
         </footer>
       </main>
@@ -1115,14 +1223,18 @@ export function App() {
                 {components.map((c) => (
                   <li key={c.key}>
                     {c.found ? "✓" : "○"} {c.label} —{" "}
-                    {c.found ? "found" : "missing"}
+                    {c.found
+                      ? "found"
+                      : c.optional
+                        ? "optional � 60 FPS only"
+                        : "missing"}
                   </li>
                 ))}
               </ul>
             )}
             <p className="hint">
               This version connects to an existing engine. On a new PC, install
-              CUDA Python, iw3, FFmpeg and optional RIFE first. Missing
+              CPU or CUDA Python, iw3, FFmpeg and optional RIFE first. Missing
               components are not downloaded silently.
             </p>
             <details className="advanced-settings">

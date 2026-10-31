@@ -1,0 +1,143 @@
+{
+  "date": "2026-10-31",
+  "platform": "Windows x64",
+  "cpu": {
+    "torch": "2.11.0+cpu",
+    "cudaAvailable": false,
+    "returncode": 0,
+    "elapsedSeconds": 160.53100000000268,
+    "outputBytes": 844932,
+    "timeline": {
+      "frames": 72,
+      "rate": "24",
+      "first": 0.0,
+      "last": 2.9583333333333335,
+      "maxGridError": 0,
+      "width": 1280,
+      "height": 384
+    },
+    "quality": {
+      "samples": [
+        {
+          "time": 0,
+          "leftEyeMAE": 0.5248220486111111,
+          "bottomRowsMAE": 0.351953125,
+          "guardMeansYUV": [
+            0.00234375,
+            0.009375,
+            0.0015625
+          ]
+        },
+        {
+          "time": 0.25,
+          "leftEyeMAE": 0.5497178819444445,
+          "bottomRowsMAE": 0.345703125,
+          "guardMeansYUV": [
+            0.00234375,
+            0.00703125,
+            0.0
+          ]
+        },
+        {
+          "time": 1,
+          "leftEyeMAE": 0.5388411458333333,
+          "bottomRowsMAE": 0.4693359375,
+          "guardMeansYUV": [
+            0.008984375,
+            0.001171875,
+            0.0001953125
+          ]
+        }
+      ],
+      "topBlackRows": 12,
+      "bottomBlackRows": 12,
+      "moviePixelsRemoved": 0
+    },
+    "thermal": {
+      "samples": 77,
+      "minC": 62.0,
+      "maxC": 93.0
+    },
+    "audioPreserved": true,
+    "sourceCheckPassed": true,
+    "backend": "cpu"
+  },
+  "gpu": "RTX 4090 (used only by CUDA regression)",
+  "source": {
+    "kind": "FFmpeg lavfi testsrc2 + sine; no film footage",
+    "width": 640,
+    "height": 360,
+    "fps": 24,
+    "seconds": 3,
+    "frames": 72
+  },
+  "settings": {
+    "strength": 1.5,
+    "method": "forward_inpaint",
+    "fps": "original"
+  },
+  "cuda": {
+    "elapsedSeconds": 17.360000000000582,
+    "timeline": {
+      "frames": 72,
+      "rate": "24",
+      "first": 0.0,
+      "last": 2.9583333333333335,
+      "maxGridError": 0,
+      "width": 1280,
+      "height": 384
+    },
+    "sourceCheckPassed": true,
+    "audioPreserved": true,
+    "quality": {
+      "samples": [
+        {
+          "time": 0,
+          "leftEyeMAE": 0.17143229166666665,
+          "bottomRowsMAE": 0.05,
+          "guardMeansYUV": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "time": 0.25,
+          "leftEyeMAE": 0.1990060763888889,
+          "bottomRowsMAE": 0.051171875,
+          "guardMeansYUV": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "time": 1,
+          "leftEyeMAE": 0.17196614583333333,
+          "bottomRowsMAE": 0.1048828125,
+          "guardMeansYUV": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "topBlackRows": 12,
+      "bottomBlackRows": 12,
+      "moviePixelsRemoved": 0
+    },
+    "thermal": {
+      "samples": 7,
+      "cpuMinC": 79.0,
+      "cpuMaxC": 85.0,
+      "gpuMinC": 45.68,
+      "gpuMaxC": 58.27
+    }
+  },
+  "limits": [
+    "Single workstation, synthetic clip only; not a laptop benchmark or depth-accuracy/VR-comfort test.",
+    "CPU used fresh CPU-only wheels/packages but reused existing pinned iw3/cache/FFmpeg/sensor installation.",
+    "An earlier less constrained CPU attempt stopped at 100 C after 48.109 seconds; no completed export.",
+    "No full movie conversion started; existing 0.4 binary and exports preserved."
+  ]
+}

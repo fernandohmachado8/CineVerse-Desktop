@@ -89,5 +89,11 @@
       "hashSource": "locally verified official download",
       "licenseSource": "https://huggingface.co/depth-anything/Depth-Anything-V2-Small"
     }
-  ]
+  ],
+  "cpuProfile": {
+    "torch": "2.11.0+cpu",
+    "torchvision": "0.26.0+cpu",
+    "torchIndex": "https://download.pytorch.org/whl/cpu",
+    "processingBackend": "cpu"
+  }
 }

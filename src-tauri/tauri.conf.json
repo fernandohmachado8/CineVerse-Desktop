@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "CineVerse Desktop",
-  "version": "0.4.0",
-  "identifier": "com.cineverse.desktop",
+  "productName": "CineVerse Compatibility Preview",
+  "version": "0.5.0",
+  "identifier": "com.cineverse.desktop.compatibility",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:5190",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "CineVerse Desktop",
+        "title": "CineVerse Compatibility Preview",
         "width": 1220,
         "height": 860,
         "minWidth": 940,
@@ -44,7 +44,8 @@
       "../worker/protection.py": "worker/protection.py",
       "../worker/engine_setup.py": "worker/engine_setup.py",
       "../worker/cpu_session.ps1": "worker/cpu_session.ps1",
-      "../thermal/thermal_guard.py": "thermal/thermal_guard.py"
+      "../thermal/thermal_guard.py": "thermal/thermal_guard.py",
+      "../worker/hardware.py": "worker/hardware.py"
     },
     "shortDescription": "Local 2D to stereoscopic movie conversion",
     "category": "Video",
