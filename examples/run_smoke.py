@@ -21,7 +21,7 @@ def main():
     parser.add_argument('--engine', type=Path, required=True, help='Installed engine.json')
     parser.add_argument('--video', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
-    parser.add_argument('--backend', choices=('cpu','cuda','mps'), required=True)
+    parser.add_argument('--backend', choices=('cpu','cuda','mps','rocm'), required=True)
     parser.add_argument('--resources',type=Path,default=ROOT,help='Packaged resource directory for QA')
     parser.add_argument('--seconds', type=int, choices=(3,10), default=3)
     args = parser.parse_args()

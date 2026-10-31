@@ -183,7 +183,7 @@ if __name__=='__main__':
                 watch_parent()
                 os.nice(10)
             # Internal child of the independent thermal supervisor, not a UI command.
-            if config.get('resolvedBackend') == 'cpu' or config.get('backend') == 'cpu':
+            if (config.get('resolvedBackend') or config.get('backend')) in ('cpu','rocm'):
                 from protection import limit_cpu_process
                 # Windows venv launchers may spawn the real interpreter before
                 # the supervisor applies affinity. Reapply inside that interpreter.

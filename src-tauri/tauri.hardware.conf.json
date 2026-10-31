@@ -1,0 +1,15 @@
+{
+  "productName": "CineVerse Hardware Preview",
+  "identifier": "com.cineverse.desktop.hardware",
+  "app": {
+    "windows": [{
+      "title": "CineVerse Hardware Preview",
+      "width": 1220,
+      "height": 860,
+      "minWidth": 940,
+      "minHeight": 720,
+      "backgroundColor": "#101417"
+    }]
+  },
+  "bundle": { "targets": ["nsis"] }
+}

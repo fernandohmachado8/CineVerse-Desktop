@@ -27,7 +27,7 @@ pub fn default_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
         .join(if cfg!(target_os = "macos") {
             "0.7-macos"
         } else {
-            "0.6"
+            "0.7-hardware"
         }))
 }
 fn resources(app: &tauri::AppHandle) -> Result<PathBuf, String> {

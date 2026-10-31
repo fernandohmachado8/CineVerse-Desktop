@@ -77,6 +77,7 @@ def limit_cpu_process(child=None):
 
 
 def mode(config):
+    if (config.get('resolvedBackend') or config.get('backend'))=='rocm':return 'required'
     if config.get('thermalMode') == 'macos': return 'macos'
     if config.get('resolvedBackend') == 'cpu' or config.get('backend') == 'cpu':
         return 'cpu'
@@ -116,6 +117,9 @@ def cpu_reading(config, now=None):
 
 
 def gpu_reading(config):
+    if (config.get('resolvedBackend') or config.get('backend'))=='rocm':
+        from amd import gpu_reading as read_radeon
+        return read_radeon(config)
     import csv
     import io
     uuid = config.get('gpuUuid', '')
@@ -203,6 +207,7 @@ def start_cpu(config, parent_pid):
     command = ('try { & ' + quoted(script) + ' -Directory ' + quoted(root) +
                ' -Library ' + quoted(library.resolve()) + ' -ParentPid ' + str(parent['pid']) +
                ' -ParentCreated ' + str(parent['created']) +
+               (' -IncludeAmdGpu' if (config.get('resolvedBackend') or config.get('backend'))=='rocm' else '') +
                ' } catch { $_ | Out-File -LiteralPath ' + quoted(launch_log) + ' -Encoding utf8; exit 1 }')
     args = ['-NoProfile', '-NonInteractive', '-EncodedCommand', base64.b64encode(command.encode('utf-16-le')).decode('ascii')]
     from ctypes import wintypes as w
@@ -254,7 +259,7 @@ def supervise(config, request, emit):
     import torch
     from hardware import capabilities
     profile = capabilities(config, torch, probe=bool(config.get('ffmpeg')))
-    config = dict(config, backend=profile['backend'], resolvedBackend=profile['backend'], gpuUuid=profile.get('gpuUuid'))
+    config = dict(config, backend=profile['backend'], resolvedBackend=profile['backend'], gpuUuid=profile.get('gpuUuid'),gpuBinding=profile.get('gpuBinding'))
     if profile.get('platform')=='macos': config['thermalMode']='macos'
     if profile['backend'] == 'cpu':
         # Hide CUDA even when explicitly testing compatibility on an NVIDIA PC.
@@ -303,7 +308,7 @@ def supervise(config, request, emit):
             audit.clear()
         emit(event['type'], **{k: v for k, v in event.items() if k != 'type'})
     try:
-        if profile['backend'] == 'cpu': limit_cpu_process(child)
+        if profile['backend'] in ('cpu','rocm'): limit_cpu_process(child)
         tree = ProcessTree(child)
         target = identity(child.pid)
         if not target: raise RuntimeError('Conversion process ended before protection was attached.')

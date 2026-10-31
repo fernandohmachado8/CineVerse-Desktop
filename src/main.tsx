@@ -37,7 +37,7 @@ type Settings = {
   cpuSensorFile?: string;
   cpuDriverInstaller?: string;
   thermalMode?: "required" | "gpu" | "macos";
-  backend?: "auto" | "cuda" | "cpu" | "mps";
+  backend?: "auto" | "cuda" | "cpu" | "mps" | "rocm";
 };
 type Media = {
   path: string;
@@ -72,7 +72,8 @@ type Engine = {
   rifeReady: boolean;
   neuralReady?: boolean;
   gpuUuid?: string;
-  backend?: "cuda" | "cpu" | "mps";
+  backend?: "cuda" | "cpu" | "mps" | "rocm";
+  gpuBinding?: { name: string; deviceCount: number; hardwareType: string };
   platform?: string;
   supportsHDR?: boolean;
   supports60?: boolean;
@@ -191,7 +192,7 @@ export function App() {
       const info = await invoke<Engine>("check_engine", { settings: s });
       setEngine(info);
       setThermal(null);
-      if (info.backend === "cpu" || !info.rifeReady) setFpsMode("original");
+      if (info.supports60 === false || !info.rifeReady) setFpsMode("original");
       return true;
     } catch (e) {
       setFailure(e);
@@ -263,7 +264,9 @@ export function App() {
       if (typeof folder === "string")
         setSetupRoot(
           folder.replace(/[\\/]$/, "") +
-            (isMac ? "/CineVerse-Mac-Engine-0.7" : "/CineVerse-Engine-0.6"),
+            (isMac
+              ? "/CineVerse-Mac-Engine-0.7"
+              : "/CineVerse-Hardware-Engine-0.7"),
         );
     } catch (e) {
       setFailure(e);
@@ -419,6 +422,7 @@ export function App() {
           settings: {
             ...settings,
             gpuUuid: engine!.gpuUuid,
+            gpuBinding: engine!.gpuBinding,
             resolvedBackend: engine!.backend,
           },
         });
@@ -435,6 +439,7 @@ export function App() {
     };
   }, [
     engine?.gpuUuid,
+    engine?.gpuBinding?.name,
     engine?.backend,
     settings.cpuSensorFile,
     settings.thermalMode,
@@ -446,7 +451,7 @@ export function App() {
     try {
       const result = await invoke<{ cpuSensorFile: string }>(
         "enable_cpu_sensor",
-        { settings },
+        { settings: { ...settings, resolvedBackend: engine?.backend } },
       );
       const s = { ...settings, ...result };
       setSettings(s);
@@ -482,7 +487,25 @@ export function App() {
         multiple: false,
         title: "Select your CineVerse engine folder",
       });
-      if (typeof root === "string") await detect(settings, root);
+      if (typeof root === "string")
+        await detect(
+          {
+            ...settings,
+            python: "",
+            iw3Repo: "",
+            ffmpeg: "",
+            ffprobe: "",
+            cache: "",
+            rifeRepo: "",
+            rifeModel: "",
+            sensorLibrary: "",
+            cpuDriverInstaller: "",
+            cpuSensorFile: undefined,
+            backend: undefined,
+            thermalMode: undefined,
+          },
+          root,
+        );
     } catch (e) {
       setFailure(e);
     }
@@ -497,7 +520,9 @@ export function App() {
       setFailure(e);
     }
   }
-  async function changeBackend(value: "auto" | "cuda" | "cpu" | "mps") {
+  async function changeBackend(
+    value: "auto" | "cuda" | "cpu" | "mps" | "rocm",
+  ) {
     const next = { ...settings, backend: value };
     setSettings(next);
     setThermal(null);
@@ -558,6 +583,7 @@ export function App() {
         settings: {
           ...settings,
           gpuUuid: engine?.gpuUuid,
+          gpuBinding: engine?.gpuBinding,
           resolvedBackend: engine?.backend,
         },
         request: {
@@ -592,6 +618,7 @@ export function App() {
         settings: {
           ...settings,
           gpuUuid: engine?.gpuUuid,
+          gpuBinding: engine?.gpuBinding,
           resolvedBackend: engine?.backend,
         },
         request: { ...job.request, resumeJob: job.path },
@@ -704,7 +731,7 @@ export function App() {
             disabled={!native || busy || checking || setupBusy}
             onChange={(e) =>
               void changeBackend(
-                e.target.value as "auto" | "cuda" | "cpu" | "mps",
+                e.target.value as "auto" | "cuda" | "cpu" | "mps" | "rocm",
               )
             }
           >
@@ -712,16 +739,23 @@ export function App() {
             {isMac ? (
               <option value="mps">Apple MPS · experimental</option>
             ) : (
-              <option value="cuda">NVIDIA CUDA · HDR + 60 FPS</option>
+              <>
+                <option value="cuda">NVIDIA CUDA · HDR + 60 FPS</option>
+                <option value="rocm">
+                  AMD Radeon · experimental ROCm engine
+                </option>
+              </>
             )}
             <option value="cpu">CPU compatibility · SDR / original FPS</option>
           </select>
           <p className="hint">
             {isMac
               ? "Mac preview: SDR / original FPS, software H.264 and Apple system thermal-state supervision. MPS is opt-in and experimental."
-              : engine?.backend === "cpu"
-                ? "CPU mode uses software H.264, up to 1280 pixels per eye, original FPS and CPU temperature protection. Work is limited to two logical CPU cores and can be much slower than a GPU."
-                : "NVIDIA mode retains HDR10, optional RIFE smoothing and GPU encoding when supported."}
+              : engine?.backend === "rocm"
+                ? "Radeon preview requires a separately prepared official ROCm engine and matching CPU/Radeon sensors. GPU inference is unverified on AMD hardware; software H.264, SDR/original FPS only. Automatic setup supplies CPU compatibility for AMD PCs."
+                : engine?.backend === "cpu"
+                  ? "CPU mode works with supported Intel and AMD x64 processors. It uses software H.264, up to 1280 pixels per eye, original FPS and CPU temperature protection. Work is limited to two logical CPU cores and can be much slower than a GPU."
+                  : "NVIDIA mode retains HDR10, optional RIFE smoothing and GPU encoding when supported."}
           </p>
           {engine?.note && <p className="warning">{engine.note}</p>}
           {media?.hdr && engine?.supportsHDR === false && (
@@ -1086,6 +1120,12 @@ export function App() {
                   macOS thermal pressure is a system state, not a Celsius
                   reading or separate CPU/GPU sensor.
                 </p>
+              ) : engine?.backend === "rocm" ? (
+                <p className="hint">
+                  Both CPU and Radeon GPU Core readings are required. Only one
+                  visible ROCm GPU and one matching sensor adapter are accepted.
+                  Ambiguous devices block conversion.
+                </p>
               ) : engine?.backend === "cpu" ? (
                 <p className="hint">
                   CPU protection is required. The GPU is not used or monitored
@@ -1112,6 +1152,7 @@ export function App() {
               )}
               {!isMac &&
                 engine?.backend !== "cpu" &&
+                engine?.backend !== "rocm" &&
                 settings.thermalMode === "gpu" && (
                   <p className="warning">
                     CPU temperature is not protected in GPU-only mode.
@@ -1122,38 +1163,46 @@ export function App() {
                   ? "Stops immediately at Critical, after 10 seconds at Serious, or after 30 seconds without valid system readings. No automatic restart. These are thermal states, not temperatures."
                   : "CPU: stop at 95 °C for 10 seconds or 100 °C immediately. GPU core: 85 °C for 10 seconds or 90 °C immediately. A required sensor missing for 30 seconds also stops the job. No automatic restart."}
               </p>
-              {!isMac && !busy && thermal?.cpu?.state !== "ready" && (
-                <>
-                  <button
-                    disabled={sensorStarting || !native || !settings.python}
-                    onClick={() => void enableSensor()}
-                  >
-                    {sensorStarting
-                      ? "Requesting permission…"
-                      : "Enable CPU sensor"}
-                  </button>
-                  <p className="hint">
-                    Approve Windows administrator access for the read-only
-                    sensor helper. Only the sensor runs elevated; it exits when
-                    this app closes.
-                  </p>
-                  {settings.cpuDriverInstaller && (
+              {!isMac &&
+                !busy &&
+                (thermal?.cpu?.state !== "ready" ||
+                  (engine?.backend === "rocm" &&
+                    thermal?.gpu?.state !== "ready")) && (
+                  <>
+                    <button
+                      disabled={sensorStarting || !native || !settings.python}
+                      onClick={() => void enableSensor()}
+                    >
+                      {sensorStarting
+                        ? "Requesting permission…"
+                        : engine?.backend === "rocm"
+                          ? "Enable CPU and Radeon sensors"
+                          : "Enable CPU sensor"}
+                    </button>
                     <p className="hint">
-                      If PawnIO is missing,{" "}
-                      <button onClick={() => void openDriver()}>
-                        Open signed CPU driver installer
-                      </button>
-                      . Complete its Windows approval and setup, then enable the
-                      CPU sensor.
+                      Approve Windows administrator access for the read-only
+                      sensor helper. Only the sensor runs elevated; it exits
+                      when this app closes.
                     </p>
-                  )}
-                </>
-              )}
+                    {settings.cpuDriverInstaller && (
+                      <p className="hint">
+                        If PawnIO is missing,{" "}
+                        <button onClick={() => void openDriver()}>
+                          Open signed CPU driver installer
+                        </button>
+                        . Complete its Windows approval and setup, then enable
+                        the CPU sensor.
+                      </p>
+                    )}
+                  </>
+                )}
               {!protectionReady && !busy && (
                 <p className="warning">
                   Conversion is blocked until required readings are available
                   and below the immediate cutoffs.{" "}
-                  {(settings.thermalMode === "gpu" && engine?.backend !== "cpu"
+                  {(settings.thermalMode === "gpu" &&
+                  engine?.backend !== "cpu" &&
+                  engine?.backend !== "rocm"
                     ? thermal?.gpu?.message
                     : thermal?.cpu?.message || thermal?.gpu?.message) ||
                     "Check the engine and enable the CPU sensor."}
@@ -1317,7 +1366,7 @@ export function App() {
               : engine?.gpu || "Engine not configured"}
           </span>
           <span>
-            {engine?.backend === "cpu"
+            {engine?.supports60 === false
               ? "Powered by iw3"
               : "Powered by iw3 + RIFE"}{" "}
             <i>·</i> No cloud upload

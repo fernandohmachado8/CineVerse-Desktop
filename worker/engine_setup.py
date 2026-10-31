@@ -31,7 +31,7 @@ def discover(current, roots):
             try:
                 saved = json.loads(manifest.read_text(encoding='utf-8-sig'))
                 for key in LABELS: accept(key, saved.get(key))
-                if not result.get('backend') and saved.get('backend') in ('auto','cpu','cuda','mps'): result['backend'] = saved['backend']
+                if not result.get('backend') and saved.get('backend') in ('auto','cpu','cuda','mps','rocm'): result['backend'] = saved['backend']
                 if not result.get('outputDir') and saved.get('outputDir'): result['outputDir'] = saved['outputDir']
             except (OSError, ValueError, TypeError): pass
         patterns = {'python': ['environments/*/Scripts/python.exe', 'runtime/python*/python.exe'],

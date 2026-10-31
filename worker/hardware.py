@@ -3,15 +3,29 @@ import subprocess
 import sys
 
 IS_MAC = sys.platform == 'darwin'
+IS_WINDOWS = sys.platform == 'win32'
+WINDOWS_BUILD = sys.getwindowsversion().build if IS_WINDOWS else 0
 
 FLAGS = getattr(subprocess, 'CREATE_NO_WINDOW', 0)
 
 
+def is_rocm(torch):
+    # ROCm intentionally shares torch.cuda; it does not provide NVIDIA codecs.
+    return bool(getattr(getattr(torch, 'version', None), 'hip', None))
+
+
 def resolve(config, torch):
     requested = config.get('backend', 'auto')
-    if requested not in ('auto', 'cuda', 'cpu', 'mps'):
-        raise ValueError('Choose Automatic, NVIDIA CUDA, Apple MPS, or CPU compatibility.')
+    if requested not in ('auto', 'cuda', 'cpu', 'mps', 'rocm'):
+        raise ValueError('Choose Automatic, NVIDIA CUDA, Apple MPS, experimental AMD ROCm, or CPU compatibility.')
     if requested == 'cpu': return 'cpu'
+    if requested == 'rocm':
+        if not IS_WINDOWS or IS_MAC or WINDOWS_BUILD<22000:raise ValueError('The experimental Radeon profile currently targets Windows 11 only. Use CPU compatibility on other platforms.')
+        if not is_rocm(torch) or not torch.cuda.is_available():
+            raise ValueError('AMD ROCm is unavailable in this Python engine. Automatic setup supplies CPU/NVIDIA packages, not ROCm. Use CPU compatibility or prepare a separate official AMD ROCm engine; see docs/AMD.md.')
+        if torch.cuda.device_count()!=1:
+            raise ValueError('Radeon temperature binding currently requires exactly one visible ROCm GPU. Multi-GPU systems are not validated; use CPU compatibility.')
+        return 'rocm'
     if requested == 'mps':
         mps = getattr(getattr(torch, 'backends', None), 'mps', None)
         if not IS_MAC or not mps or not mps.is_available():
@@ -20,6 +34,9 @@ def resolve(config, torch):
     # MPS remains opt-in until physical-Mac inference has been validated.
     if IS_MAC:
         if requested == 'cuda': raise ValueError('NVIDIA CUDA is not supported by this Mac build.')
+        return 'cpu'
+    if is_rocm(torch):
+        if requested=='cuda':raise ValueError('This is an AMD ROCm runtime, not NVIDIA CUDA. Select experimental AMD ROCm or CPU compatibility.')
         return 'cpu'
     if torch.cuda.is_available(): return 'cuda'
     if requested == 'cuda':
@@ -37,6 +54,8 @@ def encoder_probe(ffmpeg, backend):
 
 def capabilities(config, torch, probe=True):
     backend = resolve(config, torch); note = None
+    if backend=='cpu' and is_rocm(torch):
+        note='AMD ROCm was detected. Automatic mode uses CPU compatibility; Radeon acceleration requires explicit experimental selection and valid CPU/Radeon sensor readings.'
     if probe:
         result = encoder_probe(config['ffmpeg'], backend)
         if result.returncode and backend == 'cuda' and config.get('backend', 'auto') == 'auto':
@@ -55,6 +74,12 @@ def capabilities(config, torch, probe=True):
     if backend == 'mps':
         result.update(maxWidth=1280, depthResolution=392,
                       note='Experimental MPS inference with per-operation CPU fallback; software H.264 encoding. Not a validated GPU performance claim.')
+    if backend=='rocm':
+        name=torch.cuda.get_device_name(0)
+        result.update(gpu=name+' · AMD ROCm experimental · software encoding',
+            gpuBinding=dict(name=name,deviceCount=1,hardwareType='GpuAmd'),
+            hipVersion=str(torch.version.hip),
+            note='Experimental, not tested on physical AMD hardware. Requires a separate official ROCm engine and matching CPU/Radeon temperature readings. SDR/original FPS only; no NVENC, AMF or RIFE.')
     if backend == 'cuda':
         result['gpuUuid'] = 'GPU-' + str(torch.cuda.get_device_properties(0).uuid).removeprefix('GPU-')
     return result
@@ -62,11 +87,15 @@ def capabilities(config, torch, probe=True):
 
 def planned_backend(config):
     value = config.get('resolvedBackend') or config.get('backend') or 'cuda'
-    return value if value in ('cpu','mps') else 'cuda'
+    return value if value in ('cpu','mps','rocm') else 'cuda'
 
 
 def validate_profile(backend, request, media):
-    if backend in ('cpu','mps'):
+    if backend in ('cpu','mps','rocm'):
+        if backend=='rocm':
+            if media['hdr']:raise ValueError('The experimental Radeon profile supports SDR input only; HDR preservation is not implemented.')
+            if request.get('fpsMode')!='original':raise ValueError('The experimental Radeon profile keeps Original FPS; RIFE smoothing is not implemented.')
+            return
         if IS_MAC:
             if media['hdr']:raise ValueError('This Mac preview supports SDR input only. HDR preservation is not implemented; no SDR conversion was performed.')
             if request.get('fpsMode')!='original':raise ValueError('This Mac preview keeps Original FPS. RIFE smoothing is not implemented on Mac.')

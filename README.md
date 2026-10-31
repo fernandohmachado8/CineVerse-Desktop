@@ -27,6 +27,8 @@ The separate `feature/macos-preview` branch adds **CineVerse Mac Preview 0.7**, 
 
 ## Compatibility preview
 
+The `feature/amd-compatibility` branch adds a separate **Hardware Preview** with a CPU route for supported Intel/AMD x64 systems and an opt-in developer ROCm path for Radeon. Automatic setup on Radeon-only PCs uses CPU processing. Radeon acceleration requires a separate official engine, matching CPU/GPU readings and physical AMD testing; it is **not hardware-validated or automatically installed**. See [AMD setup, safeguards and verification limits](docs/AMD.md).
+
 The `feature/windows-cpu-compatibility` branch adds a separate **Windows CPU compatibility preview (0.5)**. It supports SDR/original FPS without NVIDIA, software H.264 and a bounded two-processor workload; HDR and 60 FPS remain NVIDIA features. The working 0.4 baseline stays on `main`. See [profiles, setup and measured limits](docs/COMPATIBILITY.md). This is not yet certified on most PCs.
 
 ## Features
