@@ -44,6 +44,7 @@ jobs:
           codesign --verify --deep --strict "$APP"
           PATH=/usr/bin:/bin:/usr/sbin:/sbin "$APP/Contents/MacOS/cineverse-setup-preview" --setup-engine "$ENGINE" cpu > "$RUNNER_TEMP/mac-setup.log" 2>&1 || { tail -n 60 "$RUNNER_TEMP/mac-setup.log"; exit 1; }
           "$ENGINE/environments/desktop-v07-macos/bin/python3" examples/ci_macos.py "$ENGINE" "$APP/Contents/Resources"
+          "$ENGINE/environments/desktop-v07-macos/bin/python3" examples/ci_macos.py "$ENGINE" "$APP/Contents/Resources" mps
           codesign --verify --deep --strict "$APP"
       - name: Retain development app bundle
         shell: bash
@@ -58,6 +59,7 @@ jobs:
             MACOS-SHA256SUMS.txt
             src-tauri/target/release/bundle/dmg/*.dmg
             macos-smoke-summary.json
+            macos-mps-smoke-summary.json
       - name: Setup diagnostics on failure
         if: failure()
         shell: bash
