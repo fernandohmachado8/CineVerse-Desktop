@@ -67,6 +67,10 @@ def planned_backend(config):
 
 def validate_profile(backend, request, media):
     if backend in ('cpu','mps'):
+        if IS_MAC:
+            if media['hdr']:raise ValueError('This Mac preview supports SDR input only. HDR preservation is not implemented; no SDR conversion was performed.')
+            if request.get('fpsMode')!='original':raise ValueError('This Mac preview keeps Original FPS. RIFE smoothing is not implemented on Mac.')
+            return
         if media['hdr']:
             raise ValueError('CPU compatibility currently supports SDR input only. Select the NVIDIA profile for HDR10; no SDR conversion was performed.')
         if request.get('fpsMode') != 'original':

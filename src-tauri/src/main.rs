@@ -117,7 +117,11 @@ fn discover(
             }
             if let Ok(entries) = fs::read_dir(root.join("environments")) {
                 for entry in entries.flatten() {
-                    let p = entry.path().join("Scripts/python.exe");
+                    let p = entry.path().join(if cfg!(target_os = "macos") {
+                        "bin/python3"
+                    } else {
+                        "Scripts/python.exe"
+                    });
                     if p.is_file() {
                         settings["python"] = json!(p);
                         break;
@@ -130,7 +134,7 @@ fn discover(
         .as_str()
         .is_some_and(|p| PathBuf::from(p).is_file())
     {
-        return Err("No installed AI Python found. Select the CineVerse engine folder, or use Advanced paths. This installer does not download the AI engine.".into());
+        return Err("No installed AI Python found. Install the engine automatically, select an existing CineVerse engine folder, or use Advanced paths.".into());
     }
     run_short(app, "discover", settings, json!({"roots":roots}))
 }
@@ -179,6 +183,7 @@ fn command(app: &tauri::AppHandle, mode: &str, config: &Value) -> Result<Command
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .env("PYTHONNOUSERSITE", "1")
+        .env("PYTHONDONTWRITEBYTECODE", "1")
         .env_remove("PYTHONPATH")
         .env_remove("PYTHONHOME");
     quiet(&mut cmd);

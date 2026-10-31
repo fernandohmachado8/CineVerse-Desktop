@@ -417,6 +417,7 @@ pub fn run_install(
         ])
         .arg(root)
         .env("PYTHONNOUSERSITE", "1")
+        .env("PYTHONDONTWRITEBYTECODE", "1")
         .env_remove("PYTHONPATH")
         .env_remove("PYTHONHOME")
         .stdin(Stdio::null())
@@ -667,6 +668,21 @@ mod tests {
             assert!(!valid_archive_path(Path::new(path)), "{path}");
         }
         assert!(valid_archive_path(Path::new("python/python.exe")));
+    }
+    #[test]
+    fn runtime_link_targets_must_remain_inside_python() {
+        let link = Path::new("python/bin/python3");
+        assert!(safe_link(link, Path::new("python3.12"), true));
+        assert!(safe_link(
+            link,
+            Path::new("../lib/libpython3.12.dylib"),
+            true
+        ));
+        assert!(safe_link(link, Path::new("python/bin/python3.12"), false));
+        for target in ["../../outside", "/tmp/outside", "C:/outside", "..\\outside"] {
+            assert!(!safe_link(link, Path::new(target), true));
+        }
+        assert!(!safe_link(link, Path::new("../outside"), false));
     }
     #[test]
     fn runtime_marker_is_bound_and_cancel_is_explicit() {

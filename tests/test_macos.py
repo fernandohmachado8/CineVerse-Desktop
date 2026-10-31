@@ -4,13 +4,35 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
+import tempfile
 from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).parents[1]/'worker'))
 import hardware
 import macos_platform as mac
+import engine_setup
 
 
 class MacTests(unittest.TestCase):
+    def test_mac_discovery_uses_native_paths_and_no_windows_sensor(self):
+        with tempfile.TemporaryDirectory() as d,patch.object(engine_setup,'IS_MAC',True):
+            root=Path(d)
+            for path in ('environments/desktop-v07-macos/bin/python3','tools/ffmpeg/ffmpeg','tools/ffmpeg/ffprobe'):
+                file=root/path;file.parent.mkdir(parents=True,exist_ok=True);file.touch()
+            (root/'engine.json').write_text(json.dumps(dict(backend='mps')),encoding='utf8')
+            data=engine_setup.discover({},[root])
+            self.assertEqual(data['settings']['backend'],'mps')
+            self.assertEqual(data['settings']['thermalMode'],'macos')
+            self.assertTrue(Path(data['settings']['python']).is_file())
+            self.assertNotIn('sensorLibrary',[c['key'] for c in data['components']])
+
+    def test_mac_profile_rejects_hdr_and_smoothing_before_conversion(self):
+        with patch.object(hardware,'IS_MAC',True):
+            for backend in ('cpu','mps'):
+                with self.assertRaisesRegex(ValueError,'Mac preview supports SDR'):
+                    hardware.validate_profile(backend,dict(fpsMode='original'),dict(hdr=True))
+                with self.assertRaisesRegex(ValueError,'not implemented on Mac'):
+                    hardware.validate_profile(backend,dict(fpsMode='60'),dict(hdr=False))
+
     def test_auto_is_cpu_and_mps_is_explicit(self):
         torch=SimpleNamespace(backends=SimpleNamespace(mps=SimpleNamespace(is_available=lambda:True)))
         with patch.object(hardware,'IS_MAC',True):

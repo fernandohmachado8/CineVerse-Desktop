@@ -13,6 +13,7 @@ MIT covers the original application. It does not relicense upstream engines, mod
 | Native setup HTTP/archive/hash libraries | [reqwest](https://github.com/seanmonstar/reqwest), [tar](https://github.com/alexcrichton/tar-rs), flate2 and sha2; Cargo lockfile | Original upstream licenses remain applicable |
 | PyTorch / torchvision | [PyTorch](https://github.com/pytorch/pytorch/blob/main/LICENSE), [torchvision](https://github.com/pytorch/vision/blob/main/LICENSE) | BSD-style licenses plus bundled notices, including CUDA wheel components |
 | FFmpeg / Gyan build | [Builds/source](https://www.gyan.dev/ffmpeg/builds/), [GPLv3](https://github.com/FFmpeg/FFmpeg/blob/master/COPYING.GPLv3) | Selected build enables GPL/version3; separately launched executable |
+| Mac FFmpeg / FFprobe arm64 build | [ffmpeg-static 6.1.1 release](https://github.com/eugeneware/ffmpeg-static/releases/tag/b6.1.1) | Separately downloaded executables; exact binary LICENSE and README retained alongside tools; not relicensed as MIT |
 | LibreHardwareMonitor | [MPL-2.0](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/blob/master/LICENSE) | Separate library; bundled components keep their notices |
 | PawnIO | [Upstream driver](https://github.com/namazso/PawnIO) | Separate signed driver and installer terms; never silently installed |
 | Tauri / official plugins | [MIT or Apache-2.0](https://github.com/tauri-apps/tauri) | Rust/JavaScript runtime and plugins |

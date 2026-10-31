@@ -3,11 +3,15 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).parents[1] / 'worker'))
 from engine_setup import discover
 
 
 class SetupTests(unittest.TestCase):
+    def setUp(self):
+        mock=patch('engine_setup.IS_MAC',False);mock.start();self.addCleanup(mock.stop)
+
     def test_manifest_fills_missing_but_preserves_valid_custom_paths(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d); original = root/'python-custom.exe'; original.touch()

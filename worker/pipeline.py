@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import time
 import uuid
 
@@ -267,7 +268,9 @@ def run(config,request):
             'log':str(log),'limitations':['First audio track is AAC stereo; subtitles/additional tracks omitted.',
                 'Explicit black compatibility margins retain all image pixels.','Interrupted stages restart; completed verified stages can be resumed.']}
         if smooth:report['limitations'].append('60 FPS motion is AI-generated with cut guards; artifacts remain possible.')
-        if backend in ('cpu','mps'):report['limitations'].append('CPU compatibility uses software H.264, SDR/original FPS and at most 1280 pixels per eye; two logical CPU cores.')
+        if backend in ('cpu','mps'):
+            report['limitations'].append('Software H.264, SDR/original FPS and at most 1280 pixels per eye. '+
+                ('Mac uses lower process priority and library thread limits, not a hard CPU-core affinity limit.' if sys.platform=='darwin' else 'CPU compatibility is limited to two logical CPU cores.'))
         if method=='forward_inpaint':report['limitations'].append('Neural gap filling invents disoccluded texture and may soften or flicker. It is not recovered footage.')
         if destination.exists():
             if hash_file(destination)!=report['outputSha256']:raise FileExistsError('A different export exists at the destination')

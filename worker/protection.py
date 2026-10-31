@@ -264,7 +264,7 @@ def supervise(config, request, emit):
     emit('thermal', **initial, state='checking')
     if not initial['ready']:
         missing = [initial[n].get('message', n) for n in ('cpu', 'gpu')
-                   if initial[n]['state'] != 'ready' and n in (['cpu'] if initial['mode'] == 'cpu' else ['gpu'] if initial['mode'] == 'gpu' else ['cpu', 'gpu'])]
+                   if initial[n]['state'] != 'ready' and n in (['cpu'] if initial['mode'] in ('cpu','macos') else ['gpu'] if initial['mode'] == 'gpu' else ['cpu', 'gpu'])]
         raise ValueError('Temperature protection could not arm. Conversion was not started. ' + ' '.join(missing))
     monitor = Monitor(config, time.monotonic())
     reason = monitor.sample(time.monotonic(), initial)

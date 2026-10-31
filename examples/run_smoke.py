@@ -49,7 +49,7 @@ def main():
     began = time.monotonic()
     with (out/'smoke-errors.log').open('w',encoding='utf8') as errors:
         child = subprocess.Popen([config['python'],'-u',str(args.resources/'worker/worker.py'),'run'],
-            start_new_session=os.name!='nt',env=dict(os.environ,**({'CINEVERSE_OWN_PROCESS_GROUP':'1'} if sys.platform=='darwin' else {})),
+            start_new_session=os.name!='nt',env=dict(os.environ,PYTHONDONTWRITEBYTECODE='1',**({'CINEVERSE_OWN_PROCESS_GROUP':'1'} if sys.platform=='darwin' else {})),
             stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=errors,text=True,
             encoding='utf8',creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
         try:
