@@ -751,7 +751,7 @@ export function App() {
           <p className="hint">
             {isMac
               ? "Mac preview: SDR / original FPS, software H.264 and Apple system thermal-state supervision. MPS is opt-in and experimental."
-              : engine?.backend === "rocm"
+              : settings.backend === "rocm" || engine?.backend === "rocm"
                 ? "Radeon preview requires a separately prepared official ROCm engine and matching CPU/Radeon sensors. GPU inference is unverified on AMD hardware; software H.264, SDR/original FPS only. Automatic setup supplies CPU compatibility for AMD PCs."
                 : engine?.backend === "cpu"
                   ? "CPU mode works with supported Intel and AMD x64 processors. It uses software H.264, up to 1280 pixels per eye, original FPS and CPU temperature protection. Work is limited to two logical CPU cores and can be much slower than a GPU."

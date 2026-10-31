@@ -172,6 +172,32 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 describe("Desktop conversion flow", () => {
+  it("keeps the Radeon requirements visible and blocks conversion when its runtime check fails", async () => {
+    await setup(false, true, false, true, "cpu");
+    const previous = mock.invoke.getMockImplementation()!;
+    mock.invoke.mockImplementation(async (name: string, args: any) => {
+      if (name === "check_engine" && args.settings.backend === "rocm")
+        throw Error("AMD ROCm is unavailable in this Python engine.");
+      return previous(name, args);
+    });
+    fireEvent.change(screen.getByLabelText("Processing backend"), {
+      target: { value: "rocm" },
+    });
+    await screen.findByText(/AMD ROCm is unavailable/);
+    expect(
+      screen.getByText(/Radeon preview requires a separately prepared/),
+    ).toBeTruthy();
+    expect(
+      (
+        screen
+          .getByText("Generate preview")
+          .closest("button") as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    expect(mock.invoke.mock.calls.some(([name]) => name === "start_job")).toBe(
+      false,
+    );
+  });
   it("keeps experimental Radeon on original FPS with mandatory CPU/GPU protection", async () => {
     await setup(false, true, false, true, "rocm");
     expect(screen.queryByLabelText("Required temperature sensors")).toBeNull();
