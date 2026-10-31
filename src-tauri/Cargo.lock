@@ -510,7 +510,7 @@ dependencies = [
 
 [[package]]
 name = "cineverse-setup-preview"
-version = "0.8.0"
+version = "0.8.1"
 dependencies = [
  "flate2",
  "reqwest",
