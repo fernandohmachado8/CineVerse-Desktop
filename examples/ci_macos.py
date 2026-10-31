@@ -5,6 +5,7 @@ from pathlib import Path
 import subprocess
 import sys
 import time
+import torch
 
 
 def check_owned_process_group():
@@ -51,6 +52,7 @@ states=[e['cpu']['thermalState'] for e in events if e['type']=='thermal' and 'th
 assert states and report['backend']=='cpu' and report['outputTimeline']['frames']==3
 assert report['outputTimeline']['maxGridError']==0 and report['sourceCheckPassed'] and report['preparedAudioPreserved']
 summary=dict(platform='macOS arm64 hosted runner',backend='cpu',source='Generated test pattern; three seconds at 1 FPS',
+    mpsAvailability=dict(built=torch.backends.mps.is_built(),available=torch.backends.mps.is_available(),inferenceTested=False),
     result=json.loads((out/'smoke-result.json').read_text(encoding='utf8')),timeline=report['outputTimeline'],
     sourceCheckPassed=report['sourceCheckPassed'],preparedAudioPreserved=report['preparedAudioPreserved'],quality=report['quality'],
     thermalStates=sorted(set(states)),thermalStateSamples=len(states),

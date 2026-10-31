@@ -75,8 +75,9 @@ def stop_tree(target):
     if os.name!='nt':
         import signal
         if os.getpgid(target['pid'])!=target['pid']:raise RuntimeError('Refusing to signal an unowned process group')
-        os.killpg(target['pid'],signal.SIGTERM)
-        time.sleep(.25)
+        # Thermal stops/cancellation are forced, as on Windows. Send one signal
+        # while the verified group leader still exists. On Darwin, a second
+        # signal after TERM can fail EPERM for an already-exited orphan group.
         try:os.killpg(target['pid'],signal.SIGKILL)
         except ProcessLookupError:pass
         return 'Owned process group stopped'
