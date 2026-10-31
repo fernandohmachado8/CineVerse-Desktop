@@ -12,6 +12,7 @@ import {
 const mock = vi.hoisted(() => ({
   invoke: vi.fn(),
   handler: null as any,
+  setupHandler: null as any,
   drop: null as any,
   open: vi.fn(),
 }));
@@ -22,7 +23,8 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 vi.mock("@tauri-apps/api/event", () => ({
   listen: (_name: string, cb: any) => {
-    mock.handler = cb;
+    if (_name === "conversion") mock.handler = cb;
+    else if (_name === "engine-setup") mock.setupHandler = cb;
     return Promise.resolve(() => {});
   },
 }));
@@ -56,8 +58,10 @@ async function setup(
   cpuReady = true,
   backend = "cuda",
   checkDelay = 0,
+  captureDrop?: (callback: any) => void,
 ) {
   mock.invoke.mockImplementation(async (name: string, args: any) => {
+    if (name === "setup_info") return { defaultRoot: "/engine-managed" };
     if (name === "load_settings")
       return restore ? { ...settings, lastVideo: "/test/video.mp4" } : settings;
     if (name === "check_engine") {
@@ -118,6 +122,7 @@ async function setup(
     if (name === "start_job") return "job-1";
   });
   render(<App />);
+  captureDrop?.(mock.drop);
   await screen.findByText("Test GPU");
   if (!restore)
     await act(async () =>
@@ -136,6 +141,107 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 describe("Desktop conversion flow", () => {
+  it("keeps current engine paths when an early native drop subscription fires", async () => {
+    let earlyDrop: any;
+    await setup(false, true, false, true, "cuda", 0, (callback) => {
+      earlyDrop = callback;
+    });
+    await act(async () =>
+      earlyDrop({ payload: { type: "drop", paths: ["/test/other.mp4"] } }),
+    );
+    await waitFor(() =>
+      expect(mock.invoke).toHaveBeenCalledWith("save_settings", {
+        settings: expect.objectContaining({
+          lastVideo: "/test/other.mp4",
+          python: "/engine/python",
+          outputDir: "/exports",
+        }),
+      }),
+    );
+  });
+
+  it("requires download consent and a destination before installing dependencies", async () => {
+    await setup();
+    fireEvent.click(screen.getByLabelText("Engine settings"));
+    expect(
+      (screen.getByText("Install engine automatically") as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    fireEvent.click(
+      screen.getByLabelText(/Download the engine and model files/),
+    );
+    fireEvent.click(screen.getByText("Install engine automatically"));
+    await waitFor(() =>
+      expect(mock.invoke).toHaveBeenCalledWith("install_engine", {
+        profile: "auto",
+        root: "/engine-managed",
+      }),
+    );
+    expect(
+      (screen.getByLabelText("Close settings") as HTMLButtonElement).disabled,
+    ).toBe(true);
+    fireEvent.click(screen.getByText("Cancel engine setup"));
+    await waitFor(() =>
+      expect(mock.invoke).toHaveBeenCalledWith("cancel_engine_setup"),
+    );
+    await act(async () =>
+      mock.setupHandler({
+        payload: {
+          type: "cancelled",
+          message: "Setup cancelled; downloads retained",
+        },
+      }),
+    );
+    expect(
+      screen.getByLabelText("Engine setup progress").textContent,
+    ).toContain("downloads retained");
+    expect(
+      (screen.getByText("Install engine automatically") as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
+  });
+  it("adopts verified installation settings without starting conversion", async () => {
+    await setup();
+    fireEvent.click(screen.getByLabelText("Engine settings"));
+    await act(async () =>
+      mock.setupHandler({
+        payload: {
+          type: "complete",
+          config: { ...settings, python: "/managed/python" },
+          warnings: [],
+        },
+      }),
+    );
+    await waitFor(() =>
+      expect(mock.invoke).toHaveBeenCalledWith("check_engine", {
+        settings: expect.objectContaining({ python: "/managed/python" }),
+      }),
+    );
+    expect(mock.invoke.mock.calls.some(([name]) => name === "start_job")).toBe(
+      false,
+    );
+  });
+  it("shows setup failures and allows retry", async () => {
+    await setup();
+    fireEvent.click(screen.getByLabelText("Engine settings"));
+    fireEvent.click(
+      screen.getByLabelText(/Download the engine and model files/),
+    );
+    fireEvent.click(screen.getByText("Install engine automatically"));
+    await act(async () =>
+      mock.setupHandler({
+        payload: { type: "error", message: "Download hash mismatch" },
+      }),
+    );
+    expect(
+      screen.getByLabelText("Engine setup progress").textContent,
+    ).toContain("hash mismatch");
+    expect(
+      (screen.getByText("Install engine automatically") as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
+  });
+
   it("waits for CPU capability detection before planning a restored video", async () => {
     await setup(false, true, true, true, "cpu", 500);
     expect(

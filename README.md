@@ -17,6 +17,10 @@ A Windows desktop application that turns local videos into full side-by-side ste
 
 *Actual interface in browser-preview mode. Native processing is disabled; no movie or private settings are shown.*
 
+## Automatic setup preview
+
+The `feature/automatic-engine-setup` branch adds **CineVerse Setup Preview 0.6**. First launch can download its private Python, processing tools and model files, choose CPU/NVIDIA, and save all paths automatically. No Python or Git installation is required for end users. The existing working versions remain separate. See [first-run setup, driver approval and validation limits](docs/AUTOMATIC_SETUP.md).
+
 ## Compatibility preview
 
 The `feature/windows-cpu-compatibility` branch adds a separate **Windows CPU compatibility preview (0.5)**. It supports SDR/original FPS without NVIDIA, software H.264 and a bounded two-processor workload; HDR and 60 FPS remain NVIDIA features. The working 0.4 baseline stays on `main`. See [profiles, setup and measured limits](docs/COMPATIBILITY.md). This is not yet certified on most PCs.

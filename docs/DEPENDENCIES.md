@@ -22,6 +22,10 @@ Application source and dependency manifests are included. Multi-gigabyte runtime
 
 `requirements/engine-manifest.json` records commits, URLs and hashes. Upstream release digests are distinguished from locally measured hashes. Local hashes detect changes; they are not independent signatures. A changed file fails verification rather than silently selecting another version.
 
+## Automatic first-run setup (0.6)
+
+Normal users can install the Windows app and choose **Install engine automatically**. It provisions a private Python runtime and all engine paths, without system Python or Git. Choose the engine drive once; no individual dependency configuration is needed. See [automatic setup](AUTOMATIC_SETUP.md). The commands below remain available for developers.
+
 ## CPU compatibility preview
 
 For Windows without NVIDIA, use `--profile cpu` in the commands below, with a new engine folder. This installs official CPU-only PyTorch/torchvision and omits RIFE downloads. CPU exports are SDR/original FPS only; see [compatibility](COMPATIBILITY.md). An NVIDIA driver is required only for the CUDA profile.
@@ -39,11 +43,11 @@ py -3.12 scripts/setup_engine.py --root "D:/CineVerse" --install --download-mode
 py -3.12 scripts/setup_engine.py --root "D:/CineVerse" --check
 ```
 
-Choose any drive with sufficient space. Movie workspaces need additional storage, budgeted separately by the app. The helper refuses to replace an existing engine manifest or a checkout at another revision.
+Choose any drive with sufficient space. Movie workspaces need additional storage, budgeted separately by the app. The helper refuses a foreign nonempty engine folder or a source archive at another revision. Verified managed stages can be retried with the app.
 
 If Google Drive is unavailable, download **4.25**, not lite or another model, from the [upstream list](https://github.com/hzwer/Practical-RIFE#trained-model). Add `--rife-archive "PATH_TO_OFFICIAL_4_25_ZIP"` to the install/download command. Both archive and extracted weights are checked. The tested environment does not use Practical-RIFE's old NumPy constraint; the application imports its required inference code.
 
-The sensor archive includes PawnIO setup. Review its signature and install it interactively from upstream. Do not change Windows security to make it work. In the app select the engine folder, enable the CPU helper and approve its prompt. Managed signing policies must be respected. GPU-only mode explicitly leaves CPU temperature unmonitored.
+PawnIO is a separate pinned download. Setup fetches the original signed installer and verifies its hash; launch it interactively from the app only if the driver is missing. Do not change Windows security to make it work. In the app select the engine folder, enable the CPU helper and approve its prompt. Managed signing policies must be respected. GPU-only mode explicitly leaves CPU temperature unmonitored.
 
 ## Manual configuration
 

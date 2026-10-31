@@ -2,6 +2,22 @@
 
 This standalone repository extracts the desktop converter from the larger CineVerse workspace. The existing application, source repository and movie exports were left intact. Evidence below separates source checks, native hardware runs and untested deployment claims.
 
+## Automatic setup preview — 0.6
+
+The current setup preview has **102 passing local tests**: 59 Python, 22 React, 14 legacy watchdog and 7 Rust bootstrap tests. New checks cover Git-free source archives/receipts, runtime pins and foreign-folder refusal, Windows long-path extraction, bounded network retries, consent/cancellation/configuration adoption, hash/path/symlink rejection and an actual Windows kill-on-close job that preserves another disposable process.
+
+A Windows NSIS installer was built and installed as the separate **CineVerse Setup Preview** application. Its setup-only bootstrap ran with PATH restricted to Windows System32, so no system Python or Git could be used. It downloaded private CPython 3.12.16, created a CPU-only PyTorch 2.11.0 environment, installed the pinned wheel snapshot, video/sensor tools, pinned commit archives and six model files in a new engine folder. All configured engine paths belonged to that folder; optional RIFE paths were intentionally absent for CPU mode. The signed PawnIO 2.2.0 installer was downloaded and its signature checked, but it was not executed or installed.
+
+The first attempt took 182.384 seconds and stopped at a Windows source-ZIP path-length error after package installation. Extended-path extraction fixed this without changing registry/security settings. A 5.802-second retry reused completed stages but encountered a remote connection reset for the final model. The official Hugging Face download URL and bounded retry behavior were corrected; a subsequent 31.159-second retry verified the remaining download and completed imports/software encoding. Hash failures remain fatal. These are observed recovery measurements, not an uninterrupted clean-machine timing promise.
+
+CI exposed a stale native drag/drop callback that could restore initial empty paths after settings loaded. The native subscription now reads its current handler from a ref, with a regression that invokes an early callback and verifies the saved engine paths.
+
+The native first-run UI was then exercised: CPU package, engine drive selection, download consent and **Install engine automatically**. It reused the verified engine, saved every path, closed the setup dialog and selected CPU/original-FPS mode. Saved settings were checked; no sensor session was persisted and no movie conversion was triggered by setup. Both previous installed application hashes remained unchanged.
+
+A three-second 640x360/24 FPS synthetic preview ran through the packaged worker with this newly installed CPU engine in **156.875 seconds**. All **72 frames** verified, with zero timestamp-grid error, preserved prepared audio, passed source integrity/detail checks and 12-row top/bottom compatibility margins. It recorded 75 valid active CPU samples at 73.0-92.0 C. This was a CLI-supervised preview; the native buttons were used for setup, not for this conversion. [Machine-readable evidence](automatic-setup-benchmark.json) omits private paths.
+
+This workstation already had WebView2, Windows runtime components and an approved PawnIO driver. A completely clean Windows VM, absent WebView2/driver paths and a fresh CUDA/RIFE installation are not yet certified. The private CPU environment and download/install flow are distinct from broad hardware certification. No film data was used in setup or published.
+
 ## Local checks — 0.5 compatibility preview
 
 | Check | Evidence |

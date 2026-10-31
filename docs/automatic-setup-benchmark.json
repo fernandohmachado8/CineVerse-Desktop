@@ -1,0 +1,103 @@
+{
+  "date": "2026-10-31",
+  "platform": "Windows x64 on existing development workstation",
+  "python": "3.12.16 private standalone",
+  "torch": "2.11.0+cpu",
+  "systemPythonAndGitRemovedFromPath": true,
+  "source": "Generated test pattern, 640x360, 24 FPS, three seconds; no film footage",
+  "installAttempts": [
+    {
+      "appInstallerExit": 0,
+      "elapsedSeconds": 182.3842174,
+      "pathRestrictedToWindowsSystem32": true,
+      "packagedScriptMatchesSource": true,
+      "exitCode": 1
+    },
+    {
+      "elapsedSeconds": 5.8024304,
+      "pathRestrictedToWindowsSystem32": true,
+      "usesCorrectedPackagedScript": true,
+      "exitCode": 1
+    },
+    {
+      "exitCode": 0,
+      "elapsedSeconds": 31.1592453,
+      "pathRestrictedToWindowsSystem32": true
+    }
+  ],
+  "verifiedModelFiles": 6,
+  "nativeUI": {
+    "consentAndFolderPickerExercised": true,
+    "installButtonExercised": true,
+    "settingsSavedAutomatically": true,
+    "backendSelected": "cpu",
+    "advancedPathsConfigured": false,
+    "startsConversion": false
+  },
+  "preview": {
+    "exitCode": 0,
+    "elapsedSeconds": 156.875,
+    "backend": "cpu",
+    "timeline": {
+      "frames": 72,
+      "rate": "24",
+      "first": 0.0,
+      "last": 2.9583333333333335,
+      "maxGridError": 0,
+      "width": 1280,
+      "height": 384
+    },
+    "quality": {
+      "samples": [
+        {
+          "time": 0,
+          "leftEyeMAE": 0.5248220486111111,
+          "bottomRowsMAE": 0.351953125,
+          "guardMeansYUV": [
+            0.00234375,
+            0.009375,
+            0.0015625
+          ]
+        },
+        {
+          "time": 0.25,
+          "leftEyeMAE": 0.5497178819444445,
+          "bottomRowsMAE": 0.345703125,
+          "guardMeansYUV": [
+            0.00234375,
+            0.00703125,
+            0.0
+          ]
+        },
+        {
+          "time": 1,
+          "leftEyeMAE": 0.5388411458333333,
+          "bottomRowsMAE": 0.4693359375,
+          "guardMeansYUV": [
+            0.008984375,
+            0.001171875,
+            0.0001953125
+          ]
+        }
+      ],
+      "topBlackRows": 12,
+      "bottomBlackRows": 12,
+      "moviePixelsRemoved": 0
+    },
+    "preparedAudioPreserved": true,
+    "sourceCheckPassed": true,
+    "thermal": {
+      "samples": 75,
+      "cpuMinC": 73.0,
+      "cpuMaxC": 92.0,
+      "gpuUsed": false
+    }
+  },
+  "limitations": [
+    "Existing workstation, not a clean Windows VM; WebView2, Windows runtime components and PawnIO were already available.",
+    "CPU install exercised after recovery fixes; an uninterrupted new-machine timing is not claimed.",
+    "Fresh CUDA/RIFE setup, absent-driver and absent-WebView2 scenarios are not physically certified.",
+    "Source-eye samples compare against prepared reference; synthetic test does not establish movie depth accuracy.",
+    "No full-movie conversion started."
+  ]
+}
