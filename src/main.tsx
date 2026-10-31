@@ -24,6 +24,10 @@ import {
 import "./style.css";
 
 type Settings = {
+  managedBackend?: string;
+  runtimeProbePassed?: boolean;
+  setupTorchVersion?: string;
+  setupGpuName?: string;
   python: string;
   iw3Repo: string;
   ffmpeg: string;
@@ -108,6 +112,14 @@ type SetupEvent = {
   config?: Settings;
   warnings?: string[];
 };
+type HardwareInventory = {
+  state: string;
+  architecture?: string;
+  cpu?: { name: string; manufacturer: string };
+  gpus: { name: string; driverVersion?: string }[];
+  message?: string;
+  cpuSensorDriverInstalled?: boolean;
+};
 type StereoMethod = "forward_inpaint" | "row_flow_v3";
 type Progress = {
   type: string;
@@ -154,6 +166,10 @@ export function App() {
   const isMac = hostPlatform === "macos" || engine?.platform === "macos";
   const [setupRoot, setSetupRoot] = useState("");
   const [setupProfile, setSetupProfile] = useState("auto");
+  const [hardwareInventory, setHardwareInventory] =
+    useState<HardwareInventory | null>(null);
+  const [awaitingSensorDriver, setAwaitingSensorDriver] = useState(false);
+  const [protectionSetupNotice, setProtectionSetupNotice] = useState("");
   const [setupConsent, setSetupConsent] = useState(false);
   const [setupBusy, setSetupBusy] = useState(false);
   const [setupProgress, setSetupProgress] = useState<SetupEvent | null>(null);
@@ -232,6 +248,16 @@ export function App() {
         if (info?.platform) setHostPlatform(info.platform);
       })
       .catch(() => {});
+    void invoke<HardwareInventory>("hardware_info")
+      .then((info) => setHardwareInventory(info || null))
+      .catch(() =>
+        setHardwareInventory({
+          state: "unavailable",
+          gpus: [],
+          message:
+            "Hardware information unavailable; Automatic setup will check again.",
+        }),
+      );
     const sub = listen<SetupEvent>("engine-setup", ({ payload: p }) => {
       if (p.type === "log") {
         setSetupLogs((lines) => [...lines.slice(-39), p.message || ""]);
@@ -266,7 +292,7 @@ export function App() {
           folder.replace(/[\\/]$/, "") +
             (isMac
               ? "/CineVerse-Mac-Engine-0.7"
-              : "/CineVerse-Hardware-Engine-0.7"),
+              : "/CineVerse-Automatic-Engine-0.8"),
         );
     } catch (e) {
       setFailure(e);
@@ -462,6 +488,58 @@ export function App() {
       setSensorStarting(false);
     }
   }
+  async function setupProtection() {
+    if (
+      !isMac &&
+      hardwareInventory?.cpuSensorDriverInstalled === false &&
+      settings.cpuDriverInstaller
+    ) {
+      try {
+        await invoke("open_cpu_driver", { settings });
+        setProtectionSetupNotice(
+          "Complete the signed PawnIO installer and Windows approval. CineVerse will then request approval for its read-only temperature helper. No paths need to be configured.",
+        );
+        setAwaitingSensorDriver(true);
+      } catch (e) {
+        setFailure(e);
+      }
+    } else await enableSensor();
+  }
+  useEffect(() => {
+    if (!awaitingSensorDriver) return;
+    let active = true;
+    let timer: ReturnType<typeof setTimeout>;
+    const began = Date.now();
+    async function pollDriver() {
+      try {
+        const info = await invoke<HardwareInventory>("hardware_info");
+        if (!active) return;
+        if (info?.cpuSensorDriverInstalled) {
+          setHardwareInventory(info);
+          setAwaitingSensorDriver(false);
+          setProtectionSetupNotice(
+            "Driver detected. Approve the read-only sensor helper when Windows asks.",
+          );
+          await enableSensor();
+          return;
+        }
+      } catch {}
+      if (!active) return;
+      if (Date.now() - began > 300000) {
+        setAwaitingSensorDriver(false);
+        setProtectionSetupNotice(
+          "Driver setup has not finished. Complete its installer, then enable protection again.",
+        );
+        return;
+      }
+      timer = setTimeout(() => void pollDriver(), 3000);
+    }
+    void pollDriver();
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [awaitingSensorDriver, settings.python, engine?.backend]);
   async function detect(s = settings, root: string | null = null) {
     setDetecting(true);
     setError("");
@@ -503,6 +581,10 @@ export function App() {
             cpuSensorFile: undefined,
             backend: undefined,
             thermalMode: undefined,
+            managedBackend: undefined,
+            runtimeProbePassed: undefined,
+            setupTorchVersion: undefined,
+            setupGpuName: undefined,
           },
           root,
         );
@@ -702,7 +784,7 @@ export function App() {
             <h1>Bring depth to movie night.</h1>
             <p>Turn a 2D video into a stereo film, ready for your headset.</p>
           </div>
-          <span className="version">PREVIEW · 0.7</span>
+          <span className="version">PREVIEW · 0.8</span>
         </div>
         {!native && (
           <div className="notice">
@@ -752,7 +834,7 @@ export function App() {
             {isMac
               ? "Mac preview: SDR / original FPS, software H.264 and Apple system thermal-state supervision. MPS is opt-in and experimental."
               : settings.backend === "rocm" || engine?.backend === "rocm"
-                ? "Radeon preview requires a separately prepared official ROCm engine and matching CPU/Radeon sensors. GPU inference is unverified on AMD hardware; software H.264, SDR/original FPS only. Automatic setup supplies CPU compatibility for AMD PCs."
+                ? "Automatic setup can install the pinned supported Radeon runtime. AMD inference remains experimental and requires matching CPU/Radeon sensors. Software H.264, SDR/original FPS only; unsupported hardware uses CPU compatibility."
                 : engine?.backend === "cpu"
                   ? "CPU mode works with supported Intel and AMD x64 processors. It uses software H.264, up to 1280 pixels per eye, original FPS and CPU temperature protection. Work is limited to two logical CPU cores and can be much slower than a GPU."
                   : "NVIDIA mode retains HDR10, optional RIFE smoothing and GPU encoding when supported."}
@@ -1170,14 +1252,21 @@ export function App() {
                     thermal?.gpu?.state !== "ready")) && (
                   <>
                     <button
-                      disabled={sensorStarting || !native || !settings.python}
-                      onClick={() => void enableSensor()}
+                      disabled={
+                        sensorStarting ||
+                        awaitingSensorDriver ||
+                        !native ||
+                        !settings.python
+                      }
+                      onClick={() => void setupProtection()}
                     >
-                      {sensorStarting
-                        ? "Requesting permission…"
-                        : engine?.backend === "rocm"
-                          ? "Enable CPU and Radeon sensors"
-                          : "Enable CPU sensor"}
+                      {awaitingSensorDriver
+                        ? "Waiting for driver setup…"
+                        : sensorStarting
+                          ? "Requesting permission…"
+                          : engine?.backend === "rocm"
+                            ? "Enable CPU and Radeon sensors"
+                            : "Enable CPU sensor"}
                     </button>
                     <p className="hint">
                       Approve Windows administrator access for the read-only
@@ -1196,6 +1285,11 @@ export function App() {
                     )}
                   </>
                 )}
+              {protectionSetupNotice && (
+                <p className="hint" role="status">
+                  {protectionSetupNotice}
+                </p>
+              )}
               {!protectionReady && !busy && (
                 <p className="warning">
                   Conversion is blocked until required readings are available
@@ -1395,14 +1489,42 @@ export function App() {
               </button>
             </div>
             <p>
-              Install the AI engine automatically. CineVerse downloads a private
-              Python runtime, video tools and model files, checks them and saves
-              all paths for you. Setup never starts a movie conversion.
+              Detect your CPU and GPUs and install the AI engine automatically.
+              CineVerse downloads a private Python runtime, video tools and
+              model files, checks them and saves all paths for you. Setup never
+              starts a movie conversion.
             </p>
             <section
               className="automatic-setup"
               aria-label="Automatic engine setup"
             >
+              {!isMac && (
+                <div className="notice" aria-label="Detected hardware">
+                  <strong>Detected hardware</strong>
+                  <p>
+                    {hardwareInventory?.cpu?.name ||
+                      (hardwareInventory
+                        ? "CPU information unavailable"
+                        : "Detecting CPU and graphics…")}
+                  </p>
+                  {hardwareInventory?.gpus?.map((gpu, index) => (
+                    <p key={index}>
+                      {gpu.name}
+                      {gpu.driverVersion
+                        ? ` · driver ${gpu.driverVersion}`
+                        : ""}
+                    </p>
+                  ))}
+                  {hardwareInventory?.message && (
+                    <p>{hardwareInventory.message}</p>
+                  )}
+                  <p>
+                    Automatic checks the installed driver and runtime. Supported
+                    AMD cards use an experimental pinned recipe; other systems
+                    receive CPU compatibility. No dependency paths are needed.
+                  </p>
+                </div>
+              )}
               <label className="field-label" htmlFor="setup-profile">
                 Processing package
               </label>
@@ -1419,13 +1541,20 @@ export function App() {
                 {isMac ? (
                   <option value="mps">Apple MPS · experimental</option>
                 ) : (
-                  <option value="cuda">NVIDIA · HDR and optional 60 FPS</option>
+                  <>
+                    <option value="cuda">
+                      NVIDIA · HDR and optional 60 FPS
+                    </option>
+                    <option value="rocm">
+                      AMD Radeon · supported recipe · experimental
+                    </option>
+                  </>
                 )}
               </select>
               <p className="hint">
                 Several GB of downloads; allow at least {isMac ? "8" : "15"} GiB
-                free. You do not need to install Python, Git or configure
-                dependency paths.
+                free{isMac ? "" : " (25 GiB for AMD and fallback)"}. You do not
+                need to install Python, Git or configure dependency paths.
               </p>
               <p className="engine-location">
                 <b>Engine location</b>

@@ -1,6 +1,6 @@
 [package]
 name = "cineverse-setup-preview"
-version = "0.7.0"
+version = "0.8.0"
 description = "Local stereo movie conversion"
 edition = "2021"
 

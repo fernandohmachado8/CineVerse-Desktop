@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "CineVerse Setup Preview",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "identifier": "com.cineverse.desktop.setup",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -47,6 +47,9 @@
       "../thermal/thermal_guard.py": "thermal/thermal_guard.py",
       "../worker/hardware.py": "worker/hardware.py",
       "../scripts/setup_engine.py": "scripts/setup_engine.py",
+      "../scripts/hardware_probe.ps1": "scripts/hardware_probe.ps1",
+      "../scripts/hardware_detect.py": "scripts/hardware_detect.py",
+      "../scripts/runtime_probe.py": "scripts/runtime_probe.py",
       "../requirements/engine-manifest.json": "requirements/engine-manifest.json",
       "../requirements/engine-win-py312.txt": "requirements/engine-win-py312.txt",
       "../THIRD_PARTY_NOTICES.md": "THIRD_PARTY_NOTICES.md",

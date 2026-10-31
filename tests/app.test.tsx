@@ -50,6 +50,7 @@ const settings = {
   rifeRepo: "/rife",
   rifeModel: "/models",
   outputDir: "/exports",
+  cpuDriverInstaller: "/engine/downloads/PawnIO_setup.exe",
 };
 async function setup(
   hdr = false,
@@ -61,8 +62,24 @@ async function setup(
   captureDrop?: (callback: any) => void,
   platform = "windows",
   gpuReady = true,
+  sensorDriverInstalled = true,
 ) {
+  let driverInstalled = sensorDriverInstalled;
   mock.invoke.mockImplementation(async (name: string, args: any) => {
+    if (name === "hardware_info")
+      return {
+        state: "detected",
+        architecture: "x64",
+        cpuSensorDriverInstalled: driverInstalled,
+        cpu: { name: "AMD Ryzen test CPU", manufacturer: "AuthenticAMD" },
+        gpus: [
+          { name: "AMD Radeon RX 7900 XTX", driverVersion: "32.0.23027.2005" },
+        ],
+      };
+    if (name === "open_cpu_driver") {
+      driverInstalled = true;
+      return;
+    }
     if (name === "setup_info")
       return { defaultRoot: "/engine-managed", platform };
     if (name === "load_settings")
@@ -172,6 +189,66 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 describe("Desktop conversion flow", () => {
+  it("shows detected hardware and keeps setup on automatic without starting conversion", async () => {
+    await setup();
+    fireEvent.click(screen.getByLabelText("Engine settings"));
+    expect(screen.getByLabelText("Detected hardware").textContent).toContain(
+      "AMD Ryzen test CPU",
+    );
+    expect(screen.getByLabelText("Detected hardware").textContent).toContain(
+      "AMD Radeon RX 7900 XTX",
+    );
+    expect(screen.getByLabelText("Detected hardware").textContent).toContain(
+      "32.0.23027.2005",
+    );
+    expect(
+      (screen.getByLabelText("Processing package") as HTMLSelectElement).value,
+    ).toBe("auto");
+    expect(
+      screen
+        .getAllByRole("option")
+        .some((o) => (o as HTMLOptionElement).value === "rocm"),
+    ).toBe(true);
+    expect(mock.invoke.mock.calls.some(([name]) => name === "start_job")).toBe(
+      false,
+    );
+  });
+  it("guides a missing sensor driver into the signed installer then the temperature helper", async () => {
+    await setup(
+      false,
+      true,
+      false,
+      false,
+      "cpu",
+      0,
+      undefined,
+      "windows",
+      true,
+      false,
+    );
+    fireEvent.click(screen.getByText("Enable CPU sensor"));
+    await waitFor(() =>
+      expect(mock.invoke).toHaveBeenCalledWith("open_cpu_driver", {
+        settings: expect.objectContaining({
+          cpuDriverInstaller: "/engine/downloads/PawnIO_setup.exe",
+        }),
+      }),
+    );
+    await waitFor(() =>
+      expect(mock.invoke).toHaveBeenCalledWith(
+        "enable_cpu_sensor",
+        expect.anything(),
+      ),
+    );
+    const commands = mock.invoke.mock.calls.map(([name]) => name);
+    expect(commands.indexOf("open_cpu_driver")).toBeLessThan(
+      commands.indexOf("enable_cpu_sensor"),
+    );
+    expect(commands.filter((name) => name === "enable_cpu_sensor").length).toBe(
+      1,
+    );
+    expect(commands.includes("start_job")).toBe(false);
+  });
   it("keeps the Radeon requirements visible and blocks conversion when its runtime check fails", async () => {
     await setup(false, true, false, true, "cpu");
     const previous = mock.invoke.getMockImplementation()!;
@@ -185,7 +262,9 @@ describe("Desktop conversion flow", () => {
     });
     await screen.findByText(/AMD ROCm is unavailable/);
     expect(
-      screen.getByText(/Radeon preview requires a separately prepared/),
+      screen.getByText(
+        /Automatic setup can install the pinned supported Radeon runtime/,
+      ),
     ).toBeTruthy();
     expect(
       (
@@ -206,7 +285,9 @@ describe("Desktop conversion flow", () => {
         .disabled,
     ).toBe(true);
     expect(
-      screen.getByText(/Radeon preview requires a separately prepared/),
+      screen.getByText(
+        /Automatic setup can install the pinned supported Radeon runtime/,
+      ),
     ).toBeTruthy();
     fireEvent.click(screen.getByText("Generate preview"));
     await waitFor(() =>

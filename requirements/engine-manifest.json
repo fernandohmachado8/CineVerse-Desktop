@@ -173,5 +173,105 @@
         "source": "https://github.com/eugeneware/ffmpeg-static/releases/tag/b6.1.1"
       }
     ]
+  },
+  "rocmProfile": {
+    "processingBackend": "rocm",
+    "python": "3.12",
+    "torch": "2.9.1+rocm7.2.1",
+    "torchvision": "0.24.1+rocm7.2.1",
+    "torchIndex": "https://repo.radeon.com/rocm/windows/rocm-rel-7.2.1/",
+    "runtimeVersion": "7.2.1",
+    "minimumWindowsBuild": 22000,
+    "minimumDriverStoreVersion": "32.0.23027.2005",
+    "minimumFreeGiB": 25,
+    "assets": [
+      {
+        "name": "rocm_sdk_core-7.2.1-py3-none-win_amd64.whl",
+        "url": "https://repo.radeon.com/rocm/windows/rocm-rel-7.2.1/rocm_sdk_core-7.2.1-py3-none-win_amd64.whl",
+        "sha256": "f68989d48df71cbfc3cb68bf705dc37c0f56e9666feddb59a1a0f5ff7539fe1c",
+        "bytes": 644793492,
+        "hashSource": "Locally measured download from the official AMD pinned release directory"
+      },
+      {
+        "name": "rocm_sdk_devel-7.2.1-py3-none-win_amd64.whl",
+        "url": "https://repo.radeon.com/rocm/windows/rocm-rel-7.2.1/rocm_sdk_devel-7.2.1-py3-none-win_amd64.whl",
+        "sha256": "19e6ee67e13432b7c1e8a4077df795dcb1239546ae314700c4b4d97e5b4b8f63",
+        "bytes": 232840013,
+        "hashSource": "Locally measured download from the official AMD pinned release directory"
+      },
+      {
+        "name": "rocm_sdk_libraries_custom-7.2.1-py3-none-win_amd64.whl",
+        "url": "https://repo.radeon.com/rocm/windows/rocm-rel-7.2.1/rocm_sdk_libraries_custom-7.2.1-py3-none-win_amd64.whl",
+        "sha256": "c7fe0b0731af8896093ff69e11496830d3cb6a4aed73e895c60b7cbdc200be92",
+        "bytes": 489964648,
+        "hashSource": "Locally measured download from the official AMD pinned release directory"
+      },
+      {
+        "name": "rocm-7.2.1.tar.gz",
+        "url": "https://repo.radeon.com/rocm/windows/rocm-rel-7.2.1/rocm-7.2.1.tar.gz",
+        "sha256": "9084902eaa69213a00a90784ad89e6e5fe73c702df0cc6cc3a70d777c7a6142b",
+        "bytes": 15940,
+        "hashSource": "Locally measured download from the official AMD pinned release directory"
+      },
+      {
+        "name": "torch-2.9.1+rocm7.2.1-cp312-cp312-win_amd64.whl",
+        "url": "https://repo.radeon.com/rocm/windows/rocm-rel-7.2.1/torch-2.9.1%2Brocm7.2.1-cp312-cp312-win_amd64.whl",
+        "sha256": "e88bf270163b48f7f27f7ea3db5ffb3be4ba107301933022bcb3c6ddedfeeabb",
+        "bytes": 821065907,
+        "hashSource": "Locally measured download from the official AMD pinned release directory"
+      },
+      {
+        "name": "torchvision-0.24.1+rocm7.2.1-cp312-cp312-win_amd64.whl",
+        "url": "https://repo.radeon.com/rocm/windows/rocm-rel-7.2.1/torchvision-0.24.1%2Brocm7.2.1-cp312-cp312-win_amd64.whl",
+        "sha256": "b5c34d76a2f01fb97e1e0f224bd97fc3a58ec1ee1ef2376af2d72086e9aca34c",
+        "bytes": 1863312,
+        "hashSource": "Locally measured download from the official AMD pinned release directory"
+      }
+    ],
+    "buildTools": [
+      "setuptools==78.1.0",
+      "wheel==0.45.1"
+    ],
+    "sources": {
+      "installation": "https://rocm.docs.amd.com/projects/radeon-ryzen/en/docs-7.2.1/docs/install/installrad/windows/install-pytorch.html",
+      "support": "https://rocm.docs.amd.com/projects/radeon-ryzen/en/docs-7.2.1/docs/compatibility/compatibilityrad/windows/windows_compatibility.html",
+      "driverVersions": "https://gpuopen.com/version-table/",
+      "licenses": "https://rocm.docs.amd.com/en/docs-7.2.1/about/license.html"
+    },
+    "status": "Experimental; downloaded packages verified, AMD GPU execution not tested by CineVerse developers",
+    "supportedModels": [
+      {
+        "name": "AMD Radeon RX 9070",
+        "architecture": "gfx1201"
+      },
+      {
+        "name": "AMD Radeon RX 9070 XT",
+        "architecture": "gfx1201"
+      },
+      {
+        "name": "AMD Radeon AI PRO R9700",
+        "architecture": "gfx1201"
+      },
+      {
+        "name": "AMD Radeon RX 9060 XT",
+        "architecture": "gfx1200"
+      },
+      {
+        "name": "AMD Radeon RX 7900 XTX",
+        "architecture": "gfx1100"
+      },
+      {
+        "name": "AMD Radeon PRO W7900",
+        "architecture": "gfx1100"
+      },
+      {
+        "name": "AMD Radeon PRO W7900 Dual Slot",
+        "architecture": "gfx1100"
+      },
+      {
+        "name": "AMD Radeon RX 7700",
+        "architecture": "gfx1101"
+      }
+    ]
   }
 }
