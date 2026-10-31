@@ -33,6 +33,9 @@ if os.environ.get('CINEVERSE_PROCESSING_BACKEND') in ('cpu','mps'):
     # before parsing --gpu, even for a CPU request.
     torch.set_num_threads(2)
     torch.set_num_interop_threads(1)
+    if os.environ.get('CINEVERSE_PROCESSING_BACKEND')=='mps':
+        from mps_compat import install
+        install()
     from iw3.cli import main
     main()
 else:

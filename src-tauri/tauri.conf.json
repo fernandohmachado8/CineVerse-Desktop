@@ -52,6 +52,7 @@
       "../THIRD_PARTY_NOTICES.md": "THIRD_PARTY_NOTICES.md",
       "../LICENSE": "LICENSE",
       "../worker/macos_platform.py": "worker/macos_platform.py",
+      "../worker/mps_compat.py": "worker/mps_compat.py",
       "../scripts/setup_macos.py": "scripts/setup_macos.py",
       "../requirements/engine-macos-py312.txt": "requirements/engine-macos-py312.txt"
     },

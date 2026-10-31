@@ -18,6 +18,8 @@ The `feature/macos-preview` branch adds CineVerse Mac Preview **0.7** as a separ
 
 The MPS backend is supported by [PyTorch on Apple Silicon](https://developer.apple.com/metal/pytorch/) and the pinned iw3 engine. Availability alone does not establish this adapter's speed, numerical quality, memory use or stability. Automatic mode intentionally selects CPU on Mac until physical-Mac inference has been tested.
 
+The hosted MPS test exposed an unsupported int64 `scatter_reduce_` in iw3's deterministic forward warp. A process-local adapter delegates that indexing operation to the original CPU function and returns its result to MPS. It preserves integer indices and does not edit the installed engine or globally replace PyTorch operations. Model inference still requests MPS; some work explicitly runs on CPU, so this is not an all-GPU pipeline.
+
 ## Setup and use
 
 1. Use the Apple Silicon app build. An installed copy belongs in a writable user application location; the engine is kept outside the app bundle.
@@ -60,6 +62,8 @@ PATH=/usr/bin:/bin:/usr/sbin:/sbin "$APP/Contents/MacOS/cineverse-setup-preview"
 "$ENGINE/environments/desktop-v07-macos/bin/python3" examples/ci_macos.py "$ENGINE" "$APP/Contents/Resources"
 codesign --verify --deep --strict "$APP"
 ```
+
+On a runner with MPS available, append `mps` to the `examples/ci_macos.py` command to exercise the experimental profile separately. It writes `macos-mps-smoke-summary.json`; the default CPU run writes `macos-smoke-summary.json`. CI tests both profiles and verifies the bundle signature afterward.
 
 Use a new QA engine directory for the synthetic fixture generator. It refuses to overwrite its source fixture. The helper generates a three-second, **three-frame, 1 FPS** color test pattern with audio, runs the packaged CPU worker with real models and live system thermal-state readings, and checks frame count/timestamps, source preservation and prepared audio. It also terminates a disposable process tree while preserving another process and refusing a stale identity. This small fixture validates integration; it is not a movie-quality or throughput benchmark. Private videos/logs stay in the engine directory. The sanitized summary is written to `macos-smoke-summary.json`.
 
