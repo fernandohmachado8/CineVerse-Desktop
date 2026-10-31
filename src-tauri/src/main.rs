@@ -1,4 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+mod engine_install;
 use serde_json::{json, Value};
 use std::{
     fs,
@@ -54,9 +55,15 @@ fn load_settings(app: tauri::AppHandle) -> Result<Value, String> {
     if let Some(object) = saved.as_object_mut() {
         object.remove("cpuSensorFile");
     }
-    Ok(discover(&app, saved.clone(), None)
-        .map(|v| v["settings"].clone())
-        .unwrap_or(saved))
+    if saved["python"].as_str().unwrap_or("").is_empty() {
+        let managed = engine_install::default_root(&app)?.join("engine.json");
+        if let Ok(data) = fs::read(managed) {
+            if let Ok(value) = serde_json::from_slice::<Value>(&data) {
+                saved = value;
+            }
+        }
+    }
+    Ok(saved)
 }
 fn engine_roots(root: Option<String>) -> Vec<PathBuf> {
     if let Some(root) = root {
@@ -323,6 +330,11 @@ fn start_job(
     settings: Value,
     request: Value,
 ) -> Result<String, String> {
+    let installer = app.state::<engine_install::Installer>();
+    let setup = installer.0.lock().map_err(|e| e.to_string())?;
+    if setup.is_some() {
+        return Err("Finish engine setup before starting a conversion.".into());
+    }
     let mut lock = jobs.0.lock().map_err(|e| e.to_string())?;
     if lock.is_some() {
         return Err("A conversion is already running.".into());
@@ -356,6 +368,9 @@ fn start_job(
         cancelled: cancelled.clone(),
     });
     let job_id = id.clone();
+    drop(lock);
+    drop(setup);
+    drop(installer);
     std::thread::spawn(move || {
         let _awake = WakeLock::acquire();
         let errors = std::thread::spawn(move || {
@@ -417,6 +432,32 @@ fn open_folder(path: String) -> Result<(), String> {
     Ok(())
 }
 fn main() {
+    // Reproducible setup-only path using the exact packaged bootstrap; no conversion.
+    let args: Vec<String> = std::env::args().collect();
+    if args.get(1).map(String::as_str) == Some("--setup-engine") {
+        let result = (|| {
+            let root = PathBuf::from(args.get(2).ok_or("Supply an empty engine folder")?);
+            let profile = args.get(3).map(String::as_str).unwrap_or("cpu");
+            let resource = std::env::current_exe()
+                .map_err(|e| e.to_string())?
+                .parent()
+                .ok_or("Missing resource folder")?
+                .to_path_buf();
+            engine_install::run_install(&root, profile, &resource, &AtomicBool::new(false), &|v| {
+                println!("{v}")
+            })
+        })();
+        match result {
+            Ok(v) => {
+                println!("{v}");
+                std::process::exit(0)
+            }
+            Err(e) => {
+                eprintln!("{e}");
+                std::process::exit(1)
+            }
+        }
+    }
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
             if let Some(w) = app.get_webview_window("main") {
@@ -426,7 +467,12 @@ fn main() {
         }))
         .plugin(tauri_plugin_dialog::init())
         .manage(Jobs::default())
+        .manage(engine_install::Installer::default())
         .invoke_handler(tauri::generate_handler![
+            engine_install::setup_info,
+            engine_install::install_engine,
+            engine_install::cancel_engine_setup,
+            engine_install::open_cpu_driver,
             load_settings,
             save_settings,
             check_engine,
@@ -442,6 +488,11 @@ fn main() {
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
+                if let Ok(lock) = window.state::<engine_install::Installer>().0.lock() {
+                    if let Some(flag) = lock.as_ref() {
+                        flag.store(true, Ordering::SeqCst);
+                    }
+                };
                 let state = window.state::<Jobs>();
                 if let Ok(lock) = state.0.lock() {
                     if let Some(active) = lock.as_ref() {

@@ -35,6 +35,7 @@ type Settings = {
   lastVideo?: string;
   sensorLibrary?: string;
   cpuSensorFile?: string;
+  cpuDriverInstaller?: string;
   thermalMode?: "required" | "gpu";
   backend?: "auto" | "cuda" | "cpu";
 };
@@ -91,6 +92,14 @@ type Component = {
   found: boolean;
   optional?: boolean;
 };
+type SetupEvent = {
+  type: string;
+  stage?: string;
+  message?: string;
+  percent?: number | null;
+  config?: Settings;
+  warnings?: string[];
+};
 type StereoMethod = "forward_inpaint" | "row_flow_v3";
 type Progress = {
   type: string;
@@ -133,6 +142,13 @@ export function App() {
     [checking, setChecking] = useState(false);
   const [thermal, setThermal] = useState<Thermal | null>(null),
     [sensorStarting, setSensorStarting] = useState(false);
+  const [setupRoot, setSetupRoot] = useState("");
+  const [setupProfile, setSetupProfile] = useState("auto");
+  const [setupConsent, setSetupConsent] = useState(false);
+  const [setupBusy, setSetupBusy] = useState(false);
+  const [setupProgress, setSetupProgress] = useState<SetupEvent | null>(null);
+  const [setupLogs, setSetupLogs] = useState<string[]>([]);
+  const [setupWarnings, setSetupWarnings] = useState<string[]>([]);
   const [detecting, setDetecting] = useState(false),
     [components, setComponents] = useState<Component[]>([]);
   const [media, setMedia] = useState<Media | null>(null),
@@ -166,7 +182,7 @@ export function App() {
       const info = await invoke<Engine>("check_engine", { settings: s });
       setEngine(info);
       setThermal(null);
-      if (info.backend === "cpu") setFpsMode("original");
+      if (info.backend === "cpu" || !info.rifeReady) setFpsMode("original");
       return true;
     } catch (e) {
       setFailure(e);
@@ -196,6 +212,86 @@ export function App() {
       setFailure(e);
     } finally {
       setProbing(false);
+    }
+  }
+  useEffect(() => {
+    if (!native) return;
+    void invoke<{ defaultRoot: string }>("setup_info")
+      .then((info) => {
+        if (info?.defaultRoot) setSetupRoot(info.defaultRoot);
+      })
+      .catch(() => {});
+    const sub = listen<SetupEvent>("engine-setup", ({ payload: p }) => {
+      if (p.type === "log") {
+        setSetupLogs((lines) => [...lines.slice(-39), p.message || ""]);
+        return;
+      }
+      setSetupProgress(p);
+      if (["error", "cancelled", "complete"].includes(p.type))
+        setSetupBusy(false);
+      if (p.type === "complete" && p.config) {
+        setSettings(p.config);
+        setSetupWarnings(p.warnings || []);
+        setError("");
+        setThermal(null);
+        void check(p.config).then((ok) => {
+          if (ok) setSettingsOpen(false);
+        });
+      }
+    });
+    return () => {
+      void sub.then((unlisten) => unlisten());
+    };
+  }, []);
+  async function chooseSetupLocation() {
+    try {
+      const folder = await open({
+        directory: true,
+        multiple: false,
+        title: "Choose a drive or parent folder for the AI engine",
+      });
+      if (typeof folder === "string")
+        setSetupRoot(folder.replace(/[\\/]$/, "") + "/CineVerse-Engine-0.6");
+    } catch (e) {
+      setFailure(e);
+    }
+  }
+  async function installEngine() {
+    setSetupBusy(true);
+    setSetupLogs([]);
+    setSetupWarnings([]);
+    setSetupProgress({
+      type: "progress",
+      stage: "Starting setup",
+      message: "Preparing a private engine installation",
+    });
+    try {
+      await invoke("install_engine", {
+        profile: setupProfile,
+        root: setupRoot,
+      });
+    } catch (e) {
+      setSetupBusy(false);
+      setSetupProgress({ type: "error", message: String(e) });
+    }
+  }
+  async function cancelSetup() {
+    try {
+      await invoke("cancel_engine_setup");
+      setSetupProgress({
+        type: "progress",
+        stage: "Cancelling setup",
+        message: "Waiting for owned installers to stop",
+      });
+    } catch (e) {
+      setFailure(e);
+    }
+  }
+  async function openDriver() {
+    try {
+      await invoke("open_cpu_driver", { settings });
+    } catch (e) {
+      setFailure(e);
     }
   }
   useEffect(() => {
@@ -519,6 +615,7 @@ export function App() {
     !!media &&
     !!settings.outputDir &&
     !busy &&
+    !setupBusy &&
     !probing &&
     (fpsMode !== "60" || (engine.rifeReady && engine.supports60 !== false)) &&
     (!media.hdr || engine.supportsHDR !== false) &&
@@ -559,7 +656,7 @@ export function App() {
             <h1>Bring depth to movie night.</h1>
             <p>Turn a 2D video into a stereo film, ready for your headset.</p>
           </div>
-          <span className="version">COMPATIBILITY PREVIEW · 0.5</span>
+          <span className="version">SETUP PREVIEW · 0.6</span>
         </div>
         {!native && (
           <div className="notice">
@@ -585,7 +682,7 @@ export function App() {
             id="processing-backend"
             aria-label="Processing backend"
             value={settings.backend || "auto"}
-            disabled={!native || busy || checking}
+            disabled={!native || busy || checking || setupBusy}
             onChange={(e) =>
               void changeBackend(e.target.value as "auto" | "cuda" | "cpu")
             }
@@ -607,6 +704,13 @@ export function App() {
             </p>
           )}
         </section>
+        {setupWarnings.length > 0 && (
+          <div className="notice">
+            {setupWarnings.map((w) => (
+              <p key={w}>{w}</p>
+            ))}
+          </div>
+        )}
         <div className="workspace">
           <section className="setup">
             <div className="section-heading">
@@ -995,6 +1099,16 @@ export function App() {
                     sensor helper. Only the sensor runs elevated; it exits when
                     this app closes.
                   </p>
+                  {settings.cpuDriverInstaller && (
+                    <p className="hint">
+                      If PawnIO is missing,{" "}
+                      <button onClick={() => void openDriver()}>
+                        Open signed CPU driver installer
+                      </button>
+                      . Complete its Windows approval and setup, then enable the
+                      CPU sensor.
+                    </p>
+                  )}
                 </>
               )}
               {!protectionReady && !busy && (
@@ -1185,24 +1299,126 @@ export function App() {
               </div>
               <button
                 aria-label="Close settings"
+                disabled={setupBusy}
                 onClick={() => setSettingsOpen(false)}
               >
                 <X size={20} />
               </button>
             </div>
             <p>
-              CineVerse looks for your installed engine automatically. No model
-              downloads or conversion starts during setup.
+              Install the AI engine automatically. CineVerse downloads a private
+              Python runtime, video tools and model files, checks them and saves
+              all paths for you. Setup never starts a movie conversion.
             </p>
+            <section
+              className="automatic-setup"
+              aria-label="Automatic engine setup"
+            >
+              <label className="field-label" htmlFor="setup-profile">
+                Processing package
+              </label>
+              <select
+                id="setup-profile"
+                value={setupProfile}
+                disabled={setupBusy}
+                onChange={(e) => setSetupProfile(e.target.value)}
+              >
+                <option value="auto">Automatic · recommended</option>
+                <option value="cpu">
+                  CPU compatibility · no NVIDIA required
+                </option>
+                <option value="cuda">NVIDIA · HDR and optional 60 FPS</option>
+              </select>
+              <p className="hint">
+                Several GB of downloads; allow at least 15 GiB free. You do not
+                need to install Python, Git or configure dependency paths.
+              </p>
+              <p className="engine-location">
+                <b>Engine location</b>
+                <span>{setupRoot || "Finding the default location…"}</span>
+              </p>
+              <button
+                disabled={!native || setupBusy}
+                onClick={() => void chooseSetupLocation()}
+              >
+                Choose engine drive or folder
+              </button>
+              <label className="setup-consent">
+                <input
+                  type="checkbox"
+                  checked={setupConsent}
+                  disabled={setupBusy}
+                  onChange={(e) => setSetupConsent(e.target.checked)}
+                />
+                Download the engine and model files. Each component keeps its
+                original license.
+              </label>
+              <details>
+                <summary>Included components and driver approval</summary>
+                <p className="hint">
+                  Private CPython (PSF and bundled notices), PyTorch, iw3 (MIT),
+                  Depth Anything V2 Small (Apache-2.0), FFmpeg (GPL build),
+                  LibreHardwareMonitor (MPL-2.0), and optional RIFE. Original
+                  notices are retained in the engine files. NVIDIA drivers are
+                  not installed or changed. CPU sensing uses the signed PawnIO
+                  driver: Windows approval and its interactive installer remain
+                  your choice.
+                </p>
+              </details>
+              <button
+                className="primary"
+                disabled={
+                  !native ||
+                  setupBusy ||
+                  busy ||
+                  checking ||
+                  !setupRoot ||
+                  !setupConsent
+                }
+                onClick={() => void installEngine()}
+              >
+                {setupBusy
+                  ? "Installing engine…"
+                  : "Install engine automatically"}
+              </button>
+              {setupProgress && (
+                <div
+                  className="setup-progress"
+                  role="status"
+                  aria-label="Engine setup progress"
+                >
+                  <strong>{setupProgress.stage || setupProgress.type}</strong>
+                  <p>{setupProgress.message}</p>
+                  {(setupBusy || setupProgress.percent != null) && (
+                    <progress
+                      aria-label="Engine setup stage"
+                      value={setupProgress.percent ?? undefined}
+                      max="100"
+                    />
+                  )}
+                </div>
+              )}
+              {setupBusy && (
+                <button onClick={() => void cancelSetup()}>
+                  Cancel engine setup
+                </button>
+              )}
+              {setupLogs.length > 0 && (
+                <details>
+                  <summary>Setup details</summary>
+                  <pre>{setupLogs.join("\n")}</pre>
+                </details>
+              )}
+            </section>
             <div className="setup-actions">
               <button
-                disabled={detecting || checking || !native}
+                disabled={detecting || checking || !native || setupBusy}
                 onClick={() => void detect()}
               >
                 {detecting ? "Finding engine…" : "Find installed engine"}
               </button>
               <button
-                disabled={detecting || checking || !native}
+                disabled={detecting || checking || !native || setupBusy}
                 onClick={locateEngine}
               >
                 Locate engine folder
@@ -1226,16 +1442,15 @@ export function App() {
                     {c.found
                       ? "found"
                       : c.optional
-                        ? "optional � 60 FPS only"
+                        ? "optional · 60 FPS only"
                         : "missing"}
                   </li>
                 ))}
               </ul>
             )}
             <p className="hint">
-              This version connects to an existing engine. On a new PC, install
-              CPU or CUDA Python, iw3, FFmpeg and optional RIFE first. Missing
-              components are not downloaded silently.
+              Already have an engine? Find or locate it above. Advanced paths
+              remain available for custom installations.
             </p>
             <details className="advanced-settings">
               <summary>Advanced paths</summary>
@@ -1282,7 +1497,7 @@ export function App() {
             </p>
             <button
               className="primary"
-              disabled={checking || !native}
+              disabled={checking || !native || setupBusy}
               onClick={save}
             >
               {checking ? (

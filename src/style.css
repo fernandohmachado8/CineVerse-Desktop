@@ -858,3 +858,55 @@ footer i {
 .processing-profile select {
   min-width: 320px;
 }
+.automatic-setup {
+  border: 1px solid #415648;
+  background: #17211b;
+  padding: 18px;
+  border-radius: 12px;
+  margin: 18px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.automatic-setup select {
+  padding: 10px;
+  background: #1c2425;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.engine-location {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+.setup-consent {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.automatic-setup input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+.setup-progress {
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.setup-progress progress {
+  width: 100%;
+  accent-color: #c6dcc6;
+}
+.automatic-setup pre {
+  max-height: 160px;
+  overflow: auto;
+  white-space: pre-wrap;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}

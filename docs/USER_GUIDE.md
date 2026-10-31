@@ -1,3 +1,7 @@
+# First run with automatic setup (0.6 preview)
+
+Install and open **CineVerse Setup Preview**. In Engine settings keep Automatic, choose the engine drive if desired, acknowledge the component downloads and click **Install engine automatically**. All dependency paths are saved after validation. No system Python or Git is needed. Enable CPU sensing before conversion; if PawnIO is missing, open the original signed driver installer from the protection panel and handle its normal Windows approval. See [automatic setup](AUTOMATIC_SETUP.md).
+
 # CineVerse Desktop 0.4
 
 Windows desktop converter with integrated CPU/GPU temperature supervision and bounded local engine discovery for this configured NVIDIA PC: source HDR10 preservation, preferred depth 1.5 with neural gap filling and optional true 60 FPS interpolation, NVENC export, preview, and recovery of completed stages. Earlier reconstruction experiments remain separate from this standalone desktop repository.

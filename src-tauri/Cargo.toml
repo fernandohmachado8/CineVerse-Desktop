@@ -1,6 +1,6 @@
 [package]
-name = "cineverse-compatibility"
-version = "0.5.0"
+name = "cineverse-setup-preview"
+version = "0.6.0"
 description = "Local stereo movie conversion"
 edition = "2021"
 
@@ -14,3 +14,8 @@ tauri-plugin-single-instance = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 uuid = { version = "1", features = ["v4"] }
+
+reqwest = { version = "0.13", features = ["blocking"] }
+sha2 = "0.10"
+flate2 = "1"
+tar = "0.4.46"
