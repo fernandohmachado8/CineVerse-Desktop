@@ -172,9 +172,16 @@ if __name__=='__main__':
         if sys.argv[1]=='check': print(json.dumps(check(config)))
         elif sys.argv[1]=='probe': print(json.dumps(probe(config,request['source'])))
         elif sys.argv[1]=='run':
+            if sys.platform=='darwin':
+                from macos_platform import watch_parent
+                watch_parent()
             from protection import supervise
             supervise(config,request,emit)
         elif sys.argv[1]=='convert':
+            if sys.platform=='darwin':
+                from macos_platform import watch_parent
+                watch_parent()
+                os.nice(10)
             # Internal child of the independent thermal supervisor, not a UI command.
             if config.get('resolvedBackend') == 'cpu' or config.get('backend') == 'cpu':
                 from protection import limit_cpu_process

@@ -77,9 +77,11 @@ def limit_cpu_process(child=None):
 
 
 def mode(config):
+    if config.get('thermalMode') == 'macos': return 'macos'
     if config.get('resolvedBackend') == 'cpu' or config.get('backend') == 'cpu':
         return 'cpu'
     value = config.get('thermalMode', 'required')
+    if value == 'macos': return 'macos'
     if value not in ('required', 'gpu'):
         raise ValueError('Choose CPU + GPU protection or explicitly select GPU only.')
     return value
@@ -132,6 +134,9 @@ def gpu_reading(config):
 
 
 def status(config):
+    if mode(config)=='macos':
+        from macos_platform import status as mac_status
+        return mac_status(config)
     result = {'mode': mode(config), 'limits': LIMITS, 'ready': True, 'gpuUuid': config.get('gpuUuid')}
     required = ['cpu'] if result['mode'] == 'cpu' else ['gpu'] if result['mode'] == 'gpu' else ['cpu', 'gpu']
     for name, reader in [('cpu', cpu_reading), ('gpu', gpu_reading)]:
@@ -155,11 +160,16 @@ class Monitor:
     """Monotonic sustained limits; every required sensor fails closed after 30 s."""
     def __init__(self, config, now):
         self.config = config
+        self.mac = None
+        if mode(config)=='macos':
+            from macos_platform import Monitor as MacMonitor
+            self.mac=MacMonitor(now);return
         self.names = ['cpu'] if mode(config) == 'cpu' else ['cpu', 'gpu'] if mode(config) == 'required' else ['gpu']
         self.policies = {n: Policy(n.upper(), LIMITS[n]['sustainedC'], LIMITS[n]['immediateC']) for n in self.names}
         self.last_good = {n: now for n in self.names}
 
     def sample(self, now, readings):
+        if self.mac is not None:return self.mac.sample(now,readings)
         for name in self.names:
             value = readings.get(name, {}).get('c')
             if value is None:
@@ -245,6 +255,7 @@ def supervise(config, request, emit):
     from hardware import capabilities
     profile = capabilities(config, torch, probe=bool(config.get('ffmpeg')))
     config = dict(config, backend=profile['backend'], resolvedBackend=profile['backend'], gpuUuid=profile.get('gpuUuid'))
+    if profile.get('platform')=='macos': config['thermalMode']='macos'
     if profile['backend'] == 'cpu':
         # Hide CUDA even when explicitly testing compatibility on an NVIDIA PC.
         os.environ['CUDA_VISIBLE_DEVICES'] = ''
@@ -260,7 +271,7 @@ def supervise(config, request, emit):
     if reason:
         raise ValueError('Temperature is already above the immediate cutoff. ' + reason)
     command = [sys.executable, '-u', str(Path(__file__).with_name('worker.py')), 'convert']
-    child = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+    child = subprocess.Popen(command, start_new_session=os.name!='nt', env=dict(os.environ,**({'CINEVERSE_OWN_PROCESS_GROUP':'1'} if sys.platform=='darwin' else {})), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
         stderr=subprocess.PIPE, text=True, encoding='utf8', errors='replace', creationflags=FLAGS)
     target = None
     tree = None

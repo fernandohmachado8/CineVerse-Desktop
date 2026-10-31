@@ -21,7 +21,8 @@ def main():
     parser.add_argument('--engine', type=Path, required=True, help='Installed engine.json')
     parser.add_argument('--video', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
-    parser.add_argument('--backend', choices=('cpu','cuda'), required=True)
+    parser.add_argument('--backend', choices=('cpu','cuda','mps'), required=True)
+    parser.add_argument('--resources',type=Path,default=ROOT,help='Packaged resource directory for QA')
     parser.add_argument('--seconds', type=int, choices=(3,10), default=3)
     args = parser.parse_args()
     out = args.output.resolve()
@@ -29,23 +30,26 @@ def main():
         raise ValueError('Keep private logs and rendered videos outside the source repository.')
     out.mkdir(parents=True, exist_ok=True)
     config = json.loads(args.engine.read_text(encoding='utf-8-sig'))
-    config.update(backend=args.backend, outputDir=str(out), thermalMode='required')
+    config.update(backend=args.backend, outputDir=str(out), thermalMode='macos' if sys.platform=='darwin' else 'required')
     # Run this script using the selected engine Python, so setup and child agree.
     if Path(sys.executable).resolve() != Path(config['python']).resolve():
         raise ValueError('Run this helper with the Python executable from your engine manifest.')
-    config.update(start_cpu(config, os.getpid()))
-    for attempt in range(80):
-        try:
-            cpu_reading(config)
-            break
-        except (OSError,ValueError):time.sleep(.25)
-    else:raise ValueError('CPU sensor did not become ready. No conversion started.')
+    if sys.platform=='darwin':
+        from macos_platform import status
+        if not status(config)['ready']:raise ValueError('Apple thermal state is not ready; no conversion started.')
+    else:
+        config.update(start_cpu(config, os.getpid()))
+        for attempt in range(80):
+            try:cpu_reading(config);break
+            except (OSError,ValueError):time.sleep(.25)
+        else:raise ValueError('CPU sensor did not become ready. No conversion started.')
     request = dict(source=str(args.video.resolve()), outputDir=str(out), strength=1.5,
         stereoMethod='forward_inpaint',fpsMode='original',preview=True,
         previewStart=0,previewSeconds=args.seconds)
     began = time.monotonic()
     with (out/'smoke-errors.log').open('w',encoding='utf8') as errors:
-        child = subprocess.Popen([config['python'],'-u',str(ROOT/'worker/worker.py'),'run'],
+        child = subprocess.Popen([config['python'],'-u',str(args.resources/'worker/worker.py'),'run'],
+            start_new_session=os.name!='nt',env=dict(os.environ,**({'CINEVERSE_OWN_PROCESS_GROUP':'1'} if sys.platform=='darwin' else {})),
             stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=errors,text=True,
             encoding='utf8',creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
         try:

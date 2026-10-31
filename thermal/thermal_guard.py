@@ -33,6 +33,13 @@ class Policy:
 
 
 def identity(pid):
+    if os.name!='nt':
+        import psutil
+        try:
+            process=psutil.Process(pid)
+            if not process.is_running() or process.status()==psutil.STATUS_ZOMBIE:return None
+            return dict(pid=pid,path=process.exe(),created=process.create_time())
+        except psutil.NoSuchProcess:return None
     k = ctypes.WinDLL('kernel32', use_last_error=True)
     k.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
     k.OpenProcess.restype = wintypes.HANDLE
@@ -65,6 +72,14 @@ def stop_tree(target):
     # Bind to creation time and executable, never to a reused PID alone.
     if identity(target['pid']) != target:
         raise RuntimeError('Bound process ended or changed; refusing to terminate another process')
+    if os.name!='nt':
+        import signal
+        if os.getpgid(target['pid'])!=target['pid']:raise RuntimeError('Refusing to signal an unowned process group')
+        os.killpg(target['pid'],signal.SIGTERM)
+        time.sleep(.25)
+        try:os.killpg(target['pid'],signal.SIGKILL)
+        except ProcessLookupError:pass
+        return 'Owned process group stopped'
     result = subprocess.run(['taskkill.exe', '/PID', str(target['pid']), '/T', '/F'], capture_output=True, text=True, creationflags=0x08000000)
     if identity(target['pid']) == target:
         raise RuntimeError('Could not stop bound conversion: ' + result.stderr)

@@ -24,7 +24,11 @@ pub fn default_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
         .map_err(|e| e.to_string())?
         .join("CineVerse")
         .join("Engines")
-        .join("0.6"))
+        .join(if cfg!(target_os = "macos") {
+            "0.7-macos"
+        } else {
+            "0.6"
+        }))
 }
 fn resources(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let path = app.path().resource_dir().map_err(|e| e.to_string())?;
@@ -129,6 +133,34 @@ fn valid_archive_path(path: &Path) -> bool {
             .next()
             .is_some_and(|c| c.as_os_str() == "python")
 }
+fn safe_link(path: &Path, target: &Path, symbolic: bool) -> bool {
+    if target.is_absolute()
+        || target.to_string_lossy().contains(':')
+        || target.to_string_lossy().contains('\\')
+    {
+        return false;
+    }
+    let joined = if symbolic {
+        path.parent().unwrap_or(Path::new("")).join(target)
+    } else {
+        target.to_path_buf()
+    };
+    let mut parts = Vec::new();
+    for c in joined.components() {
+        match c {
+            Component::Normal(p) => parts.push(p),
+            Component::CurDir => {}
+            Component::ParentDir => {
+                if parts.len() <= 1 {
+                    return false;
+                }
+                parts.pop();
+            }
+            _ => return false,
+        }
+    }
+    parts.first().is_some_and(|p| *p == "python")
+}
 fn unpack_python(archive: &Path, destination: &Path, flag: &AtomicBool) -> Result<(), String> {
     let gzip = flate2::read::GzDecoder::new(File::open(archive).map_err(|e| e.to_string())?);
     let mut tar = tar::Archive::new(gzip);
@@ -138,7 +170,16 @@ fn unpack_python(archive: &Path, destination: &Path, flag: &AtomicBool) -> Resul
         let mut entry = entry.map_err(|e| e.to_string())?;
         let kind = entry.header().entry_type();
         let path = entry.path().map_err(|e| e.to_string())?;
-        if !valid_archive_path(&path) || !(kind.is_file() || kind.is_dir()) {
+        let link_ok = if cfg!(unix) && (kind.is_symlink() || kind.is_hard_link()) {
+            let target = entry
+                .link_name()
+                .map_err(|e| e.to_string())?
+                .ok_or("Missing runtime link target")?;
+            safe_link(&path, &target, kind.is_symlink())
+        } else {
+            false
+        };
+        if !valid_archive_path(&path) || !(kind.is_file() || kind.is_dir() || link_ok) {
             return Err("Unsafe runtime archive entry refused.".into());
         }
         size += entry.size();
@@ -192,9 +233,22 @@ fn claim_root(root: &Path, identity: &str) -> Result<File, String> {
         use std::os::windows::fs::OpenOptionsExt;
         options.share_mode(0);
     }
-    options
+    let file = options
         .open(root.join(".setup-running.lock"))
-        .map_err(|_| "Another setup is using this engine folder. Wait for it to finish.".into())
+        .map_err(|_| {
+            "Another setup is using this engine folder. Wait for it to finish.".to_string()
+        })?;
+    #[cfg(unix)]
+    {
+        use std::os::fd::AsRawFd;
+        extern "C" {
+            fn flock(fd: i32, op: i32) -> i32;
+        }
+        if unsafe { flock(file.as_raw_fd(), 6) } != 0 {
+            return Err("Another setup is using this engine folder.".into());
+        }
+    }
+    Ok(file)
 }
 #[cfg(windows)]
 struct OwnedJob(*mut std::ffi::c_void);
@@ -278,17 +332,24 @@ pub fn run_install(
     flag: &AtomicBool,
     emit: &dyn Fn(Value),
 ) -> Result<Value, String> {
-    if !cfg!(windows) {
-        return Err("Automatic setup currently supports Windows x64.".into());
+    if !cfg!(windows) && !cfg!(target_os = "macos") {
+        return Err("Automatic setup supports Windows and Apple Silicon macOS.".into());
     }
-    if !matches!(profile, "auto" | "cpu" | "cuda") {
+    if !(matches!(profile, "auto" | "cpu")
+        || cfg!(windows) && profile == "cuda"
+        || cfg!(target_os = "macos") && profile == "mps")
+    {
         return Err("Choose Automatic, CPU or NVIDIA.".into());
     }
     let manifest: Value = serde_json::from_slice(
         &fs::read(resource.join("requirements/engine-manifest.json")).map_err(|e| e.to_string())?,
     )
     .map_err(|e| e.to_string())?;
-    let asset = &manifest["bootstrapPython"];
+    let asset = if cfg!(target_os = "macos") {
+        &manifest["macosArm64"]["bootstrapPython"]
+    } else {
+        &manifest["bootstrapPython"]
+    };
     let digest = asset["sha256"].as_str().ok_or("Runtime digest missing")?;
     let _lock = claim_root(root, digest)?;
     // Check storage before downloading or executing anything.
@@ -324,7 +385,11 @@ pub fn run_install(
     );
     download(asset, &archive, flag, emit)?;
     let runtime = root.join("runtime");
-    let python = runtime.join("python/python.exe");
+    let python = runtime.join(if cfg!(target_os = "macos") {
+        "python/bin/python3.12"
+    } else {
+        "python/python.exe"
+    });
     let receipt = runtime.join(".runtime-ready");
     if !receipt.is_file() || fs::read_to_string(&receipt).unwrap_or_default() != digest {
         fs::create_dir_all(&runtime).map_err(|e| e.to_string())?;
@@ -337,7 +402,11 @@ pub fn run_install(
     cancelled(flag)?;
     let mut cmd = Command::new(&python);
     cmd.arg("-u")
-        .arg(resource.join("scripts/setup_engine.py"))
+        .arg(resource.join(if cfg!(target_os = "macos") {
+            "scripts/setup_macos.py"
+        } else {
+            "scripts/setup_engine.py"
+        }))
         .args([
             "--install",
             "--resume",
@@ -354,6 +423,12 @@ pub fn run_install(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     super::quiet(&mut cmd);
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        cmd.process_group(0);
+        cmd.env("CINEVERSE_OWN_PROCESS_GROUP", "1");
+    }
     let mut child = cmd.spawn().map_err(|e| e.to_string())?;
     #[cfg(windows)]
     let _job = match OwnedJob::attach(&child) {
@@ -437,7 +512,9 @@ pub fn run_install(
 }
 #[tauri::command]
 pub fn setup_info(app: tauri::AppHandle) -> Result<Value, String> {
-    Ok(json!({"defaultRoot":default_root(&app)?,"minimumGiB":15}))
+    Ok(
+        json!({"defaultRoot":default_root(&app)?,"minimumGiB":if cfg!(target_os="macos"){8}else{15},"platform":if cfg!(target_os="macos"){"macos"}else{"windows"}}),
+    )
 }
 #[tauri::command]
 pub fn install_engine(app: tauri::AppHandle, profile: String, root: String) -> Result<(), String> {
@@ -498,6 +575,9 @@ pub fn cancel_engine_setup(state: tauri::State<Installer>) -> Result<(), String>
 }
 #[tauri::command]
 pub fn open_cpu_driver(app: tauri::AppHandle, settings: Value) -> Result<(), String> {
+    if !cfg!(windows) {
+        return Err("macOS uses system thermal state and needs no PawnIO driver.".into());
+    }
     let resource = resources(&app)?;
     let manifest: Value = serde_json::from_slice(
         &fs::read(resource.join("requirements/engine-manifest.json")).map_err(|e| e.to_string())?,

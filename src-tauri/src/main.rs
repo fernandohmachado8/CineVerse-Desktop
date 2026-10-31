@@ -182,6 +182,12 @@ fn command(app: &tauri::AppHandle, mode: &str, config: &Value) -> Result<Command
         .env_remove("PYTHONPATH")
         .env_remove("PYTHONHOME");
     quiet(&mut cmd);
+    #[cfg(target_os = "macos")]
+    {
+        use std::os::unix::process::CommandExt;
+        cmd.process_group(0);
+        cmd.env("CINEVERSE_OWN_PROCESS_GROUP", "1");
+    }
     Ok(cmd)
 }
 fn run_short(
@@ -267,18 +273,32 @@ extern "system" {
     fn SetThreadExecutionState(flags: u32) -> u32;
     fn GetDriveTypeW(path: *const u16) -> u32;
 }
-struct WakeLock;
+struct WakeLock {
+    #[cfg(target_os = "macos")]
+    process: Option<std::process::Child>,
+}
 impl WakeLock {
     fn acquire() -> Self {
         #[cfg(windows)]
         unsafe {
             SetThreadExecutionState(0x80000001);
         };
-        Self
+        Self {
+            #[cfg(target_os = "macos")]
+            process: Command::new("/usr/bin/caffeinate")
+                .args(["-i", "-w", &std::process::id().to_string()])
+                .spawn()
+                .ok(),
+        }
     }
 }
 impl Drop for WakeLock {
     fn drop(&mut self) {
+        #[cfg(target_os = "macos")]
+        if let Some(mut p) = self.process.take() {
+            let _ = p.kill();
+            let _ = p.wait();
+        }
         #[cfg(windows)]
         unsafe {
             SetThreadExecutionState(0x80000000);
@@ -309,9 +329,17 @@ fn stop_tree(pid: u32) {
         quiet(&mut cmd);
         let _ = cmd.output();
     }
-    #[cfg(not(windows))]
+    #[cfg(unix)]
     {
-        let _ = Command::new("kill").arg(pid.to_string()).output();
+        extern "C" {
+            fn kill(pid: i32, signal: i32) -> i32;
+            fn getpgid(pid: i32) -> i32;
+        }
+        if unsafe { getpgid(pid as i32) } == pid as i32 {
+            unsafe {
+                kill(-(pid as i32), 15);
+            }
+        }
     }
 }
 #[tauri::command]
@@ -425,7 +453,9 @@ fn open_folder(path: String) -> Result<(), String> {
     let dir = dir.canonicalize().map_err(|e| e.to_string())?;
     #[cfg(windows)]
     let mut cmd = Command::new("explorer.exe");
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    let mut cmd = Command::new("/usr/bin/open");
+    #[cfg(all(not(windows), not(target_os = "macos")))]
     let mut cmd = Command::new("xdg-open");
     cmd.arg(dir);
     cmd.spawn().map_err(|e| e.to_string())?;
@@ -438,11 +468,16 @@ fn main() {
         let result = (|| {
             let root = PathBuf::from(args.get(2).ok_or("Supply an empty engine folder")?);
             let profile = args.get(3).map(String::as_str).unwrap_or("cpu");
-            let resource = std::env::current_exe()
-                .map_err(|e| e.to_string())?
-                .parent()
-                .ok_or("Missing resource folder")?
-                .to_path_buf();
+            let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+            let parent = exe.parent().ok_or("Missing resource folder")?;
+            let resource = if cfg!(target_os = "macos") {
+                parent
+                    .parent()
+                    .ok_or("Missing app bundle")?
+                    .join("Resources")
+            } else {
+                parent.to_path_buf()
+            };
             engine_install::run_install(&root, profile, &resource, &AtomicBool::new(false), &|v| {
                 println!("{v}")
             })

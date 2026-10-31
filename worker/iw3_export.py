@@ -28,7 +28,7 @@ def transform(self,x):
 
 OutputTransform.transform=transform
 sys.argv=['iw3',*sys.argv[1:]]
-if os.environ.get('CINEVERSE_PROCESSING_BACKEND') == 'cpu':
+if os.environ.get('CINEVERSE_PROCESSING_BACKEND') in ('cpu','mps'):
     # Call the CLI function directly: iw3's module entry probes CUDA contexts
     # before parsing --gpu, even for a CPU request.
     torch.set_num_threads(2)

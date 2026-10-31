@@ -1,0 +1,29 @@
+{
+  "productName": "CineVerse Mac Preview",
+  "identifier": "com.cineverse.desktop.macos",
+  "app": {
+    "windows": [
+      {
+        "title": "CineVerse Mac Preview",
+        "width": 1220,
+        "height": 860,
+        "minWidth": 940,
+        "minHeight": 720,
+        "backgroundColor": "#101417"
+      }
+    ]
+  },
+  "bundle": {
+    "targets": [
+      "app",
+      "dmg"
+    ],
+    "icon": [
+      "icons/icon.icns"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "14.0",
+      "signingIdentity": "-"
+    }
+  }
+}
