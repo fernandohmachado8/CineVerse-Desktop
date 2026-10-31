@@ -53,6 +53,7 @@
       "../LICENSE": "LICENSE",
       "../worker/macos_platform.py": "worker/macos_platform.py",
       "../worker/mps_compat.py": "worker/mps_compat.py",
+      "../worker/amd.py": "worker/amd.py",
       "../scripts/setup_macos.py": "scripts/setup_macos.py",
       "../requirements/engine-macos-py312.txt": "requirements/engine-macos-py312.txt"
     },

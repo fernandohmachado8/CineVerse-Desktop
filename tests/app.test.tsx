@@ -60,6 +60,7 @@ async function setup(
   checkDelay = 0,
   captureDrop?: (callback: any) => void,
   platform = "windows",
+  gpuReady = true,
 ) {
   mock.invoke.mockImplementation(async (name: string, args: any) => {
     if (name === "setup_info")
@@ -73,10 +74,18 @@ async function setup(
         ready: true,
         gpu: "Test GPU",
         backend,
+        gpuBinding:
+          backend === "rocm"
+            ? {
+                name: "AMD Radeon RX 7900 XTX",
+                deviceCount: 1,
+                hardwareType: "GpuAmd",
+              }
+            : undefined,
         platform,
         supportsHDR: backend === "cuda",
         supports60: backend === "cuda",
-        maxWidth: backend === "cpu" ? 1280 : 1920,
+        maxWidth: backend === "cuda" ? 1920 : 1280,
         rifeReady: true,
         gpuUuid: "GPU-test",
       };
@@ -92,13 +101,17 @@ async function setup(
       };
     if (name === "thermal_status")
       return {
-        ready: cpuReady,
+        ready: cpuReady && (backend !== "rocm" || gpuReady),
         cpu: {
           state: cpuReady ? "ready" : "unavailable",
           c: cpuReady ? 60 : undefined,
           message: cpuReady ? undefined : "CPU sensor missing",
         },
-        gpu: { state: "ready", c: 50 },
+        gpu: {
+          state: gpuReady ? "ready" : "unavailable",
+          c: gpuReady ? 50 : undefined,
+          message: gpuReady ? undefined : "Radeon sensor missing",
+        },
       };
     if (name === "enable_cpu_sensor")
       return { cpuSensorFile: "/sensor/cpu-sample.json" };
@@ -145,7 +158,13 @@ async function setup(
   await waitFor(() =>
     expect(
       screen.getByLabelText("Temperature protection").textContent,
-    ).toContain(cpuReady ? "Ready to arm" : "CPU sensor missing"),
+    ).toContain(
+      !cpuReady
+        ? "CPU sensor missing"
+        : backend === "rocm" && !gpuReady
+          ? "Radeon sensor missing"
+          : "Ready to arm",
+    ),
   );
 }
 afterEach(() => {
@@ -153,6 +172,116 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 describe("Desktop conversion flow", () => {
+  it("keeps the Radeon requirements visible and blocks conversion when its runtime check fails", async () => {
+    await setup(false, true, false, true, "cpu");
+    const previous = mock.invoke.getMockImplementation()!;
+    mock.invoke.mockImplementation(async (name: string, args: any) => {
+      if (name === "check_engine" && args.settings.backend === "rocm")
+        throw Error("AMD ROCm is unavailable in this Python engine.");
+      return previous(name, args);
+    });
+    fireEvent.change(screen.getByLabelText("Processing backend"), {
+      target: { value: "rocm" },
+    });
+    await screen.findByText(/AMD ROCm is unavailable/);
+    expect(
+      screen.getByText(/Radeon preview requires a separately prepared/),
+    ).toBeTruthy();
+    expect(
+      (
+        screen
+          .getByText("Generate preview")
+          .closest("button") as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    expect(mock.invoke.mock.calls.some(([name]) => name === "start_job")).toBe(
+      false,
+    );
+  });
+  it("keeps experimental Radeon on original FPS with mandatory CPU/GPU protection", async () => {
+    await setup(false, true, false, true, "rocm");
+    expect(screen.queryByLabelText("Required temperature sensors")).toBeNull();
+    expect(
+      (screen.getByText("Smooth 60 FPS").closest("button") as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(
+      screen.getByText(/Radeon preview requires a separately prepared/),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByText("Generate preview"));
+    await waitFor(() =>
+      expect(mock.invoke).toHaveBeenCalledWith(
+        "start_job",
+        expect.objectContaining({
+          settings: expect.objectContaining({
+            resolvedBackend: "rocm",
+            gpuBinding: {
+              name: "AMD Radeon RX 7900 XTX",
+              deviceCount: 1,
+              hardwareType: "GpuAmd",
+            },
+          }),
+          request: expect.objectContaining({
+            fpsMode: "original",
+            preview: true,
+          }),
+        }),
+      ),
+    );
+  });
+  it("allows re-enabling Radeon sensors even when CPU readings already work", async () => {
+    await setup(
+      false,
+      true,
+      false,
+      true,
+      "rocm",
+      0,
+      undefined,
+      "windows",
+      false,
+    );
+    // The renderer must honor the worker's combined ready flag.
+    await act(async () =>
+      mock.handler({
+        payload: {
+          type: "thermal",
+          ready: false,
+          cpu: { state: "ready", c: 60 },
+          gpu: { state: "unavailable", message: "Radeon sensor missing" },
+        },
+      }),
+    );
+    expect(
+      (
+        screen
+          .getByText("Generate preview")
+          .closest("button") as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    fireEvent.click(screen.getByText("Enable CPU and Radeon sensors"));
+    await waitFor(() =>
+      expect(mock.invoke).toHaveBeenCalledWith("enable_cpu_sensor", {
+        settings: expect.objectContaining({ resolvedBackend: "rocm" }),
+      }),
+    );
+  });
+  it("clears previous engine executable paths when a different engine folder is explicitly selected", async () => {
+    await setup();
+    mock.open.mockResolvedValueOnce("/other-engine");
+    fireEvent.click(screen.getByLabelText("Engine settings"));
+    fireEvent.click(screen.getByText("Locate engine folder"));
+    await waitFor(() =>
+      expect(mock.invoke).toHaveBeenCalledWith("find_engine", {
+        root: "/other-engine",
+        settings: expect.objectContaining({
+          python: "",
+          iw3Repo: "",
+          backend: undefined,
+        }),
+      }),
+    );
+  });
   it("offers Mac setup without NVIDIA or Windows sensor controls", async () => {
     await setup(false, true, false, true, "cpu", 0, undefined, "macos");
     const protection = screen.getByLabelText("Temperature protection");
