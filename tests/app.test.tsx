@@ -59,9 +59,11 @@ async function setup(
   backend = "cuda",
   checkDelay = 0,
   captureDrop?: (callback: any) => void,
+  platform = "windows",
 ) {
   mock.invoke.mockImplementation(async (name: string, args: any) => {
-    if (name === "setup_info") return { defaultRoot: "/engine-managed" };
+    if (name === "setup_info")
+      return { defaultRoot: "/engine-managed", platform };
     if (name === "load_settings")
       return restore ? { ...settings, lastVideo: "/test/video.mp4" } : settings;
     if (name === "check_engine") {
@@ -71,6 +73,7 @@ async function setup(
         ready: true,
         gpu: "Test GPU",
         backend,
+        platform,
         supportsHDR: backend === "cuda",
         supports60: backend === "cuda",
         maxWidth: backend === "cpu" ? 1280 : 1920,
@@ -78,6 +81,15 @@ async function setup(
         gpuUuid: "GPU-test",
       };
     }
+    if (name === "thermal_status" && platform === "macos")
+      return {
+        ready: cpuReady,
+        cpu: {
+          state: cpuReady ? "ready" : "unavailable",
+          label: cpuReady ? "Nominal" : undefined,
+        },
+        gpu: { state: "not_separate" },
+      };
     if (name === "thermal_status")
       return {
         ready: cpuReady,
@@ -141,6 +153,50 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 describe("Desktop conversion flow", () => {
+  it("offers Mac setup without NVIDIA or Windows sensor controls", async () => {
+    await setup(false, true, false, true, "cpu", 0, undefined, "macos");
+    const protection = screen.getByLabelText("Temperature protection");
+    expect(protection.textContent).toContain("Nominal");
+    expect(protection.textContent).not.toContain("°C");
+    expect(screen.queryByText("Enable CPU sensor")).toBeNull();
+    expect(screen.queryByLabelText("Required temperature sensors")).toBeNull();
+    fireEvent.click(screen.getByLabelText("Engine settings"));
+    expect(
+      screen
+        .getAllByRole("option")
+        .some((o) => (o as HTMLOptionElement).value === "cuda"),
+    ).toBe(false);
+    expect(screen.queryByRole("option", { name: /NVIDIA CUDA/ })).toBeNull();
+    fireEvent.change(screen.getByLabelText("Processing package"), {
+      target: { value: "mps" },
+    });
+    fireEvent.click(
+      screen.getByLabelText(/Download the engine and model files/),
+    );
+    fireEvent.click(screen.getByText("Install engine automatically"));
+    await waitFor(() =>
+      expect(mock.invoke).toHaveBeenCalledWith("install_engine", {
+        profile: "mps",
+        root: "/engine-managed",
+      }),
+    );
+    expect(mock.invoke.mock.calls.some(([name]) => name === "start_job")).toBe(
+      false,
+    );
+  });
+  it("rejects unsupported HDR on Mac without offering NVIDIA as a solution", async () => {
+    await setup(true, true, false, true, "cpu", 0, undefined, "macos");
+    expect(
+      screen.getByText(/This Mac preview supports SDR input only/),
+    ).toBeTruthy();
+    expect(
+      (
+        screen
+          .getByText("Generate preview")
+          .closest("button") as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+  });
   it("keeps current engine paths when an early native drop subscription fires", async () => {
     let earlyDrop: any;
     await setup(false, true, false, true, "cuda", 0, (callback) => {

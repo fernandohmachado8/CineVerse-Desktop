@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import time
 import uuid
 
@@ -57,7 +58,7 @@ def plan(config,request):
     backend=planned_backend(config)
     validate_profile(backend, request, media)
     smooth=request.get('fpsMode')=='60' and media['fps']<60
-    budget=max(GIB,int(seconds*(6 if backend=='cpu' else 24 if smooth else 16)*1024**2))
+    budget=max(GIB,int(seconds*(6 if backend in ('cpu','mps') else 24 if smooth else 16)*1024**2))
     directory=Path(request.get('outputDir') or config.get('outputDir') or '.')
     parent=directory
     while not parent.exists() and parent!=parent.parent:parent=parent.parent
@@ -68,8 +69,8 @@ def plan(config,request):
     return {'media':media,'strength':strength,'start':start,'seconds':seconds,'hdr':media['hdr'],
         'smooth':smooth,'stereoMethod':method,'targetFPS':60 if request.get('fpsMode')=='60' else media['fps'],
         'spaceBudgetBytes':budget,'freeBytes':free,'enoughSpace':free>=budget,
-        'backend':backend,'maxWidth':1280 if backend=='cpu' else 1920,
-        'estimatedSecondsLow':None if backend=='cpu' else seconds*factor[0],'estimatedSecondsHigh':None if backend=='cpu' else seconds*factor[1],
+        'backend':backend,'maxWidth':1280 if backend in ('cpu','mps') else 1920,
+        'estimatedSecondsLow':None if backend in ('cpu','mps') else seconds*factor[0],'estimatedSecondsHigh':None if backend in ('cpu','mps') else seconds*factor[1],
         'outputEstimateBytesLow':int(seconds*1.5e6),'outputEstimateBytesHigh':int(seconds*4e6),
         'note':'Time and file size vary with scene motion. Space budget includes temporary videos. HDR is retained from HDR10 sources.'}
 
@@ -183,8 +184,8 @@ def run(config,request):
         ffmpeg=config['ffmpeg'];here=Path(__file__).parent
         prepared=work/'prepared.mp4';reference=work/'smooth60.mp4' if smooth else prepared
         vf=f"scale=w='trunc(min({capabilities['maxWidth']},iw)/2)*2':h=-2,setsar=1,fps={media['rate']}"
-        codec='libx264' if backend=='cpu' else 'hevc_nvenc' if hdr else 'h264_nvenc';fmt='p010le' if hdr else 'yuv420p'
-        encoding=['-preset','medium','-crf','18','-threads','2'] if backend=='cpu' else ['-preset','p6','-rc','constqp','-qp','16']
+        codec='libx264' if backend in ('cpu','mps') else 'hevc_nvenc' if hdr else 'h264_nvenc';fmt='p010le' if hdr else 'yuv420p'
+        encoding=['-preset','medium','-crf','18','-threads','2'] if backend in ('cpu','mps') else ['-preset','p6','-rc','constqp','-qp','16']
         prepare=[ffmpeg,'-hide_banner','-nostdin','-n','-ss',str(p['start']),*(['-hwaccel','cuda'] if backend=='cuda' else []),'-i',str(source),'-t',str(p['seconds']),
             '-map','0:v:0','-map','0:a:0?','-vf',vf,'-c:v',codec,*encoding,'-pix_fmt',fmt,
             *(['-profile:v','main10','-tag:v','hvc1'] if hdr else []),'-c:a','aac','-b:a','256k','-ac','2',
@@ -195,12 +196,13 @@ def run(config,request):
             from hdr_trial import hdr_params
             if hdr_params(prepared,config['ffprobe'])!=hdr_params(source,config['ffprobe']):raise ValueError('Preparation did not retain HDR10 metadata.')
         env=dict(os.environ,NUNIF_HOME=config['cache'],HF_HOME=str(Path(config['cache'])/'huggingface'),TORCH_HOME=str(Path(config['cache'])/'torch'),PYTHONNOUSERSITE='1',PYTHONUNBUFFERED='1')
-        if backend=='cpu':env.update(CUDA_VISIBLE_DEVICES='',OMP_NUM_THREADS='2',MKL_NUM_THREADS='2',CINEVERSE_PROCESSING_BACKEND='cpu')
+        if backend in ('cpu','mps'):env.update(CUDA_VISIBLE_DEVICES='',OMP_NUM_THREADS='2',MKL_NUM_THREADS='2',VECLIB_MAXIMUM_THREADS='2',CINEVERSE_PROCESSING_BACKEND=backend)
+        if backend=='mps':env['PYTORCH_ENABLE_MPS_FALLBACK']='1'
         base=[config['python'],'-u','-m','iw3','--depth-model','Any_V2_S','--gpu','-1' if backend=='cpu' else '0','--method',method,
             '--synthetic-view','right','--divergence',str(p['strength']),'--convergence','.5','--resolution',str(capabilities['depthResolution']),
             '--edge-dilation','2','--ema-normalize','--scene-detect','--scene-cache-dir',str(work/'cuts'),
-            '--video-codec',codec,'--pix-fmt','yuv420p10le' if hdr else 'yuv420p','--colorspace','auto','--crf','18' if backend=='cpu' else '12','--preset','medium' if backend=='cpu' else 'p6','--batch-size','1' if backend=='cpu' else '2']
-        if backend=='cpu':base+=['--disable-amp','--max-workers','0']
+            '--video-codec',codec,'--pix-fmt','yuv420p10le' if hdr else 'yuv420p','--colorspace','auto','--crf','18' if backend in ('cpu','mps') else '12','--preset','medium' if backend in ('cpu','mps') else 'p6','--batch-size','1' if backend in ('cpu','mps') else '2']
+        if backend in ('cpu','mps'):base+=['--disable-amp','--max-workers','0']
         if method=='forward_inpaint':base+=['--inpaint-model','light_inpaint_v1']
         if smooth:
             def detect():
@@ -239,7 +241,7 @@ def run(config,request):
                 *(['-tag:v','hvc1'] if hdr else []),'-movflags','+faststart',str(final)],'Restoring audio and HDR metadata',log)
         stage('Finalizing video',['verified.mp4'],['stereo_hdr.mp4'],finalize)
         def verify():
-            emit('progress',stage='Verifying output',percent=None,eta=None,message='Fully decoding reference and output using '+('software' if backend=='cpu' else 'NVIDIA hardware'))
+            emit('progress',stage='Verifying output',percent=None,eta=None,message='Fully decoding reference and output using '+('software' if backend in ('cpu','mps') else 'NVIDIA hardware'))
             a=timeline(reference,hardware=backend=='cuda');b=timeline(final,hardware=backend=='cuda')
             height=((a['height']+16+63)//64)*64
             if b['frames']!=a['frames'] or b['width']!=2*a['width'] or b['height']!=height:raise RuntimeError('Stereo frame count/geometry verification failed')
@@ -266,7 +268,9 @@ def run(config,request):
             'log':str(log),'limitations':['First audio track is AAC stereo; subtitles/additional tracks omitted.',
                 'Explicit black compatibility margins retain all image pixels.','Interrupted stages restart; completed verified stages can be resumed.']}
         if smooth:report['limitations'].append('60 FPS motion is AI-generated with cut guards; artifacts remain possible.')
-        if backend=='cpu':report['limitations'].append('CPU compatibility uses software H.264, SDR/original FPS and at most 1280 pixels per eye; two logical CPU cores.')
+        if backend in ('cpu','mps'):
+            report['limitations'].append('Software H.264, SDR/original FPS and at most 1280 pixels per eye. '+
+                ('Mac uses lower process priority and library thread limits, not a hard CPU-core affinity limit.' if sys.platform=='darwin' else 'CPU compatibility is limited to two logical CPU cores.'))
         if method=='forward_inpaint':report['limitations'].append('Neural gap filling invents disoccluded texture and may soften or flicker. It is not recovered footage.')
         if destination.exists():
             if hash_file(destination)!=report['outputSha256']:raise FileExistsError('A different export exists at the destination')

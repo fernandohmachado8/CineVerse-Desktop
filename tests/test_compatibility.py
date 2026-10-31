@@ -16,6 +16,9 @@ def fake_torch(cuda=False):
 
 
 class CompatibilityTests(unittest.TestCase):
+    def setUp(self):
+        mock=patch.object(h,'IS_MAC',False);mock.start();self.addCleanup(mock.stop)
+
     def test_auto_uses_cpu_without_cuda_and_forced_cuda_fails(self):
         self.assertEqual(h.resolve({},fake_torch()),'cpu')
         self.assertEqual(h.resolve({'backend':'cpu'},SimpleNamespace()),'cpu')

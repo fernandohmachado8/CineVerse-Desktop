@@ -126,5 +126,52 @@
     "version": "2.2.0",
     "hashSource": "official GitHub release asset digest",
     "publisher": "namazso"
+  },
+  "macosArm64": {
+    "platform": "macOS arm64",
+    "minimumMacOS": "14.0",
+    "bootstrapPython": {
+      "version": "3.12.16",
+      "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261026/cpython-3.12.16%2B20261026-aarch64-apple-darwin-install_only_stripped.tar.gz",
+      "sha256": "353d5f1b4fd2715e7053f12f068435d5bbad16b91e057006b5d01e0925709a7e",
+      "hashSource": "official GitHub release asset digest"
+    },
+    "torch": "2.11.0",
+    "torchvision": "0.26.0",
+    "torchIndex": "https://pypi.org/simple",
+    "ffmpegAssets": [
+      {
+        "name": "ffmpeg",
+        "url": "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-darwin-arm64",
+        "sha256": "a90e3db6a3fd35f6074b013f948b1aa45b31c6375489d39e572bea3f18336584",
+        "hashSource": "official GitHub release asset digest",
+        "version": "6.1.1",
+        "source": "https://github.com/eugeneware/ffmpeg-static/releases/tag/b6.1.1"
+      },
+      {
+        "name": "ffprobe",
+        "url": "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffprobe-darwin-arm64",
+        "sha256": "bb2db6f5d8cef919da12fbf592119a987202a8c060a886f3cab091f9cab90b64",
+        "hashSource": "official GitHub release asset digest",
+        "version": "6.1.1",
+        "source": "https://github.com/eugeneware/ffmpeg-static/releases/tag/b6.1.1"
+      },
+      {
+        "name": "LICENSE",
+        "url": "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/darwin-arm64.LICENSE",
+        "sha256": "cb48bf09a11f5fb576cddb0431c8f5ed0a60157a9ec942adffc13907cbe083f2",
+        "hashSource": "official GitHub release asset digest",
+        "version": "6.1.1",
+        "source": "https://github.com/eugeneware/ffmpeg-static/releases/tag/b6.1.1"
+      },
+      {
+        "name": "README",
+        "url": "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/darwin-arm64.README",
+        "sha256": "05ba4b92c96605434b1aaae3eedf5a2c280c9607bf78ffca9a5b536d9af2dc6a",
+        "hashSource": "official GitHub release asset digest",
+        "version": "6.1.1",
+        "source": "https://github.com/eugeneware/ffmpeg-static/releases/tag/b6.1.1"
+      }
+    ]
   }
 }

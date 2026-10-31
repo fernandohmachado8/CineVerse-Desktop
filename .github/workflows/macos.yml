@@ -1,0 +1,67 @@
+name: macOS preview
+on:
+  push:
+    branches: [feature/macos-preview]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  apple-silicon:
+    runs-on: macos-15
+    timeout-minutes: 55
+    env:
+      CARGO_BUILD_JOBS: "2"
+      MACOSX_DEPLOYMENT_TARGET: "14.0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: uname -m && sw_vers && df -h
+      - run: python scripts/audit_publication.py
+      - run: python -m unittest discover -s tests -v
+      - run: npm ci
+      - run: npm test
+      - run: npm run format:check
+      - run: npm run icons
+      - run: npm run build
+      - run: cargo test --manifest-path src-tauri/Cargo.toml --locked
+      - run: npm run tauri -- build --config src-tauri/tauri.macos.conf.json --bundles app,dmg
+      - name: Verify packaged bootstrap without system Python or Homebrew
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="src-tauri/target/release/bundle/macos/CineVerse Mac Preview.app"
+          ENGINE="$RUNNER_TEMP/cineverse-mac-engine"
+          codesign --verify --deep --strict "$APP"
+          PATH=/usr/bin:/bin:/usr/sbin:/sbin "$APP/Contents/MacOS/cineverse-setup-preview" --setup-engine "$ENGINE" cpu > "$RUNNER_TEMP/mac-setup.log" 2>&1 || { tail -n 60 "$RUNNER_TEMP/mac-setup.log"; exit 1; }
+          "$ENGINE/environments/desktop-v07-macos/bin/python3" examples/ci_macos.py "$ENGINE" "$APP/Contents/Resources"
+          "$ENGINE/environments/desktop-v07-macos/bin/python3" examples/ci_macos.py "$ENGINE" "$APP/Contents/Resources" mps
+          codesign --verify --deep --strict "$APP"
+      - name: Retain development app bundle
+        shell: bash
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent "src-tauri/target/release/bundle/macos/CineVerse Mac Preview.app" CineVerse-Mac-Preview-arm64.app.zip
+          shasum -a 256 CineVerse-Mac-Preview-arm64.app.zip src-tauri/target/release/bundle/dmg/*.dmg > MACOS-SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CineVerse-Mac-Preview-arm64
+          path: |
+            CineVerse-Mac-Preview-arm64.app.zip
+            MACOS-SHA256SUMS.txt
+            src-tauri/target/release/bundle/dmg/*.dmg
+            macos-smoke-summary.json
+            macos-mps-smoke-summary.json
+      - name: Setup diagnostics on failure
+        if: failure()
+        shell: bash
+        run: |
+          if test -f "$RUNNER_TEMP/mac-setup.log"; then tail -n 60 "$RUNNER_TEMP/mac-setup.log"; fi

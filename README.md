@@ -9,7 +9,7 @@
 ![Tauri](https://img.shields.io/badge/Tauri-2-24C8D8)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-A Windows desktop application that turns local videos into full side-by-side stereo for players such as Bigscreen, with optional motion interpolation, HDR10 preservation and per-conversion temperature supervision.
+A desktop application that turns local videos into full side-by-side stereo for VR players, with per-conversion thermal supervision. Windows/NVIDIA offers optional motion interpolation and HDR10 preservation; the separate Apple Silicon preview starts with SDR at the original frame rate.
 
 </div>
 
@@ -20,6 +20,10 @@ A Windows desktop application that turns local videos into full side-by-side ste
 ## Automatic setup preview
 
 The `feature/automatic-engine-setup` branch adds **CineVerse Setup Preview 0.6**. First launch can download its private Python, processing tools and model files, choose CPU/NVIDIA, and save all paths automatically. No Python or Git installation is required for end users. The existing working versions remain separate. See [first-run setup, driver approval and validation limits](docs/AUTOMATIC_SETUP.md).
+
+## Apple Silicon preview
+
+The separate `feature/macos-preview` branch adds **CineVerse Mac Preview 0.7**, targeting M1 and newer on macOS 14+. It provides automatic private-engine setup, CPU processing, opt-in experimental MPS, SDR/original FPS and Apple's system thermal-state supervision. HDR and RIFE smoothing are not implemented on Mac. The development app is **not Developer ID signed or notarized**. See [Mac setup, build commands and validation limits](docs/MACOS.md). Windows releases remain separate.
 
 ## Compatibility preview
 
@@ -45,6 +49,7 @@ This creates **depth on a virtual movie screen**. It does not reconstruct a walk
 | Video engineering | Timestamp-driven resampling, scene-cut guards, HDR metadata/SEI, audio verification and NVENC |
 | Reliability | Atomic checkpoints, source fingerprints, stage hashes, recovery and actionable errors |
 | Windows systems | Process identity, job-object cleanup, narrowly elevated CPU sensing and independent supervision |
+| macOS preview | Native arm64 bootstrap, private process groups, Apple system thermal-state supervision and separate packaging |
 | Verification | Frontend/Python tests, Windows fault tests, synthetic fixtures and CI |
 
 The original application work is integration and product engineering. **iw3, RIFE and the pretrained model authors provide the underlying research and inference engines.** No new AI model was trained for this project. Development used AI coding assistance; this portfolio documents implemented behavior and measured tests, without claiming novel model research.
@@ -60,7 +65,7 @@ npm ci
 npm run dev
 ```
 
-Open the printed localhost URL. This is a **read-only interface preview**; conversion requires the Windows app and configured engine. The [synthetic fixture generator](examples/generate_fixture.py) supplies analytical test geometry, not AI output or film footage.
+Open the printed localhost URL. This is a **read-only interface preview**; conversion requires a native app and configured engine. The [synthetic fixture generator](examples/generate_fixture.py) supplies analytical test geometry, not AI output or film footage.
 
 ## Build for Windows
 
@@ -107,7 +112,7 @@ Tests require no copyrighted media. Native GPU evidence was measured locally; no
 
 ## Limits
 
-Windows/NVIDIA is the experimental target. HDR10 is supported; HLG and Dolby Vision preservation are rejected. Output is scaled to at most 1920 pixels per eye, uses the first audio track as AAC stereo and omits subtitles. RIFE is not HDR-trained; neural filling can soften or invent detail. Depth comfort varies with material and viewer. Software thermal safeguards cannot guarantee hardware safety and do not measure GPU VRAM/hotspot temperature.
+The Windows/NVIDIA profile supports HDR10; HLG and Dolby Vision preservation are rejected. Its output is scaled to at most 1920 pixels per eye; CPU/Mac profiles use at most 1280. Output uses the first audio track as AAC stereo and omits subtitles. Mac currently supports SDR/original FPS only. RIFE is not HDR-trained; neural filling can soften or invent detail. Depth comfort varies with material and viewer. Software thermal safeguards cannot guarantee hardware safety. Windows does not measure GPU VRAM/hotspot temperature; Mac uses a system thermal state rather than Celsius sensors.
 
 Read the [user guide](docs/USER_GUIDE.md) before a long conversion. Setup, launch and recovery never auto-start a job.
 

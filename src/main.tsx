@@ -36,8 +36,8 @@ type Settings = {
   sensorLibrary?: string;
   cpuSensorFile?: string;
   cpuDriverInstaller?: string;
-  thermalMode?: "required" | "gpu";
-  backend?: "auto" | "cuda" | "cpu";
+  thermalMode?: "required" | "gpu" | "macos";
+  backend?: "auto" | "cuda" | "cpu" | "mps";
 };
 type Media = {
   path: string;
@@ -72,7 +72,8 @@ type Engine = {
   rifeReady: boolean;
   neuralReady?: boolean;
   gpuUuid?: string;
-  backend?: "cuda" | "cpu";
+  backend?: "cuda" | "cpu" | "mps";
+  platform?: string;
   supportsHDR?: boolean;
   supports60?: boolean;
   maxWidth?: number;
@@ -83,7 +84,13 @@ type Thermal = {
   ready: boolean;
   state?: string;
   reason?: string;
-  cpu: { state: string; c?: number; message?: string };
+  cpu: {
+    state: string;
+    c?: number;
+    message?: string;
+    label?: string;
+    thermalState?: number;
+  };
   gpu: { state: string; c?: number; message?: string };
 };
 type Component = {
@@ -142,6 +149,8 @@ export function App() {
     [checking, setChecking] = useState(false);
   const [thermal, setThermal] = useState<Thermal | null>(null),
     [sensorStarting, setSensorStarting] = useState(false);
+  const [hostPlatform, setHostPlatform] = useState("windows");
+  const isMac = hostPlatform === "macos" || engine?.platform === "macos";
   const [setupRoot, setSetupRoot] = useState("");
   const [setupProfile, setSetupProfile] = useState("auto");
   const [setupConsent, setSetupConsent] = useState(false);
@@ -216,9 +225,10 @@ export function App() {
   }
   useEffect(() => {
     if (!native) return;
-    void invoke<{ defaultRoot: string }>("setup_info")
+    void invoke<{ defaultRoot: string; platform?: string }>("setup_info")
       .then((info) => {
         if (info?.defaultRoot) setSetupRoot(info.defaultRoot);
+        if (info?.platform) setHostPlatform(info.platform);
       })
       .catch(() => {});
     const sub = listen<SetupEvent>("engine-setup", ({ payload: p }) => {
@@ -251,7 +261,10 @@ export function App() {
         title: "Choose a drive or parent folder for the AI engine",
       });
       if (typeof folder === "string")
-        setSetupRoot(folder.replace(/[\\/]$/, "") + "/CineVerse-Engine-0.6");
+        setSetupRoot(
+          folder.replace(/[\\/]$/, "") +
+            (isMac ? "/CineVerse-Mac-Engine-0.7" : "/CineVerse-Engine-0.6"),
+        );
     } catch (e) {
       setFailure(e);
     }
@@ -484,7 +497,7 @@ export function App() {
       setFailure(e);
     }
   }
-  async function changeBackend(value: "auto" | "cuda" | "cpu") {
+  async function changeBackend(value: "auto" | "cuda" | "cpu" | "mps") {
     const next = { ...settings, backend: value };
     setSettings(next);
     setThermal(null);
@@ -662,7 +675,7 @@ export function App() {
             <h1>Bring depth to movie night.</h1>
             <p>Turn a 2D video into a stereo film, ready for your headset.</p>
           </div>
-          <span className="version">SETUP PREVIEW · 0.6</span>
+          <span className="version">PREVIEW · 0.7</span>
         </div>
         {!native && (
           <div className="notice">
@@ -690,23 +703,32 @@ export function App() {
             value={settings.backend || "auto"}
             disabled={!native || busy || checking || setupBusy}
             onChange={(e) =>
-              void changeBackend(e.target.value as "auto" | "cuda" | "cpu")
+              void changeBackend(
+                e.target.value as "auto" | "cuda" | "cpu" | "mps",
+              )
             }
           >
             <option value="auto">Automatic · detect this PC</option>
-            <option value="cuda">NVIDIA CUDA · HDR + 60 FPS</option>
+            {isMac ? (
+              <option value="mps">Apple MPS · experimental</option>
+            ) : (
+              <option value="cuda">NVIDIA CUDA · HDR + 60 FPS</option>
+            )}
             <option value="cpu">CPU compatibility · SDR / original FPS</option>
           </select>
           <p className="hint">
-            {engine?.backend === "cpu"
-              ? "CPU mode uses software H.264, up to 1280 pixels per eye, original FPS and CPU temperature protection. Work is limited to two logical CPU cores and can be much slower than a GPU."
-              : "NVIDIA mode retains HDR10, optional RIFE smoothing and GPU encoding when supported."}
+            {isMac
+              ? "Mac preview: SDR / original FPS, software H.264 and Apple system thermal-state supervision. MPS is opt-in and experimental."
+              : engine?.backend === "cpu"
+                ? "CPU mode uses software H.264, up to 1280 pixels per eye, original FPS and CPU temperature protection. Work is limited to two logical CPU cores and can be much slower than a GPU."
+                : "NVIDIA mode retains HDR10, optional RIFE smoothing and GPU encoding when supported."}
           </p>
           {engine?.note && <p className="warning">{engine.note}</p>}
           {media?.hdr && engine?.supportsHDR === false && (
             <p className="warning">
-              CPU compatibility supports SDR input only. Choose an SDR source or
-              NVIDIA mode; HDR is not converted to SDR automatically.
+              {isMac
+                ? "This Mac preview supports SDR input only; HDR preservation is not implemented."
+                : "CPU compatibility supports SDR input only. Choose an SDR source or NVIDIA mode; HDR is not converted to SDR automatically."}
             </p>
           )}
         </section>
@@ -1037,25 +1059,34 @@ export function App() {
               </div>
               <div className="temperatures">
                 <span>
-                  CPU{" "}
+                  {isMac ? "System thermal state" : "CPU"}{" "}
                   <b>
-                    {thermal?.cpu?.c != null
-                      ? `${thermal.cpu.c.toFixed(0)} °C`
-                      : "Unavailable"}
-                  </b>
-                </span>
-                <span>
-                  GPU core{" "}
-                  <b>
-                    {thermal?.gpu?.c != null
-                      ? `${thermal.gpu.c.toFixed(0)} °C`
-                      : engine?.backend === "cpu"
-                        ? "Not used"
+                    {isMac
+                      ? thermal?.cpu?.label || "Unavailable"
+                      : thermal?.cpu?.c != null
+                        ? `${thermal.cpu.c.toFixed(0)} °C`
                         : "Unavailable"}
                   </b>
                 </span>
+                <span>
+                  {isMac ? "Monitoring" : "GPU core"}{" "}
+                  <b>
+                    {isMac
+                      ? "Apple system state"
+                      : thermal?.gpu?.c != null
+                        ? `${thermal.gpu.c.toFixed(0)} °C`
+                        : engine?.backend === "cpu"
+                          ? "Not used"
+                          : "Unavailable"}
+                  </b>
+                </span>
               </div>
-              {engine?.backend === "cpu" ? (
+              {isMac ? (
+                <p className="hint">
+                  macOS thermal pressure is a system state, not a Celsius
+                  reading or separate CPU/GPU sensor.
+                </p>
+              ) : engine?.backend === "cpu" ? (
                 <p className="hint">
                   CPU protection is required. The GPU is not used or monitored
                   in this profile.
@@ -1079,18 +1110,19 @@ export function App() {
                   </select>
                 </>
               )}
-              {engine?.backend !== "cpu" && settings.thermalMode === "gpu" && (
-                <p className="warning">
-                  CPU temperature is not protected in GPU-only mode.
-                </p>
-              )}
+              {!isMac &&
+                engine?.backend !== "cpu" &&
+                settings.thermalMode === "gpu" && (
+                  <p className="warning">
+                    CPU temperature is not protected in GPU-only mode.
+                  </p>
+                )}
               <p className="hint">
-                CPU: stop at 95 °C for 10 seconds or 100 °C immediately. GPU
-                core: 85 °C for 10 seconds or 90 °C immediately. A required
-                sensor missing for 30 seconds also stops the job. No automatic
-                restart.
+                {isMac
+                  ? "Stops immediately at Critical, after 10 seconds at Serious, or after 30 seconds without valid system readings. No automatic restart. These are thermal states, not temperatures."
+                  : "CPU: stop at 95 °C for 10 seconds or 100 °C immediately. GPU core: 85 °C for 10 seconds or 90 °C immediately. A required sensor missing for 30 seconds also stops the job. No automatic restart."}
               </p>
-              {!busy && thermal?.cpu?.state !== "ready" && (
+              {!isMac && !busy && thermal?.cpu?.state !== "ready" && (
                 <>
                   <button
                     disabled={sensorStarting || !native || !settings.python}
@@ -1128,9 +1160,11 @@ export function App() {
                 </p>
               )}
               <p className="hint">
-                {engine?.backend === "cpu"
-                  ? "CPU sensing requires supported package/core sensors. Software protection cannot guarantee hardware safety."
-                  : "Checks GPU core temperature, not VRAM or hotspot. Software protection cannot guarantee hardware safety."}
+                {isMac
+                  ? "Apple thermal-state supervision does not guarantee hardware safety or establish VR comfort."
+                  : engine?.backend === "cpu"
+                    ? "CPU sensing requires supported package/core sensors. Software protection cannot guarantee hardware safety."
+                    : "Checks GPU core temperature, not VRAM or hotspot. Software protection cannot guarantee hardware safety."}
               </p>
             </section>
             <div className="job-panel" aria-live="polite">
@@ -1333,11 +1367,16 @@ export function App() {
                 <option value="cpu">
                   CPU compatibility · no NVIDIA required
                 </option>
-                <option value="cuda">NVIDIA · HDR and optional 60 FPS</option>
+                {isMac ? (
+                  <option value="mps">Apple MPS · experimental</option>
+                ) : (
+                  <option value="cuda">NVIDIA · HDR and optional 60 FPS</option>
+                )}
               </select>
               <p className="hint">
-                Several GB of downloads; allow at least 15 GiB free. You do not
-                need to install Python, Git or configure dependency paths.
+                Several GB of downloads; allow at least {isMac ? "8" : "15"} GiB
+                free. You do not need to install Python, Git or configure
+                dependency paths.
               </p>
               <p className="engine-location">
                 <b>Engine location</b>
@@ -1364,11 +1403,9 @@ export function App() {
                 <p className="hint">
                   Private CPython (PSF and bundled notices), PyTorch, iw3 (MIT),
                   Depth Anything V2 Small (Apache-2.0), FFmpeg (GPL build),
-                  LibreHardwareMonitor (MPL-2.0), and optional RIFE. Original
-                  notices are retained in the engine files. NVIDIA drivers are
-                  not installed or changed. CPU sensing uses the signed PawnIO
-                  driver: Windows approval and its interactive installer remain
-                  your choice.
+                  {isMac
+                    ? "Mac uses Apple's built-in system thermal state. No PawnIO, Homebrew, kernel driver or administrator sensor helper is installed. Original notices are retained in the engine files. This development build is not Developer ID notarized."
+                    : "LibreHardwareMonitor (MPL-2.0), and optional RIFE. Original notices are retained in the engine files. NVIDIA drivers are not installed or changed. CPU sensing uses the signed PawnIO driver: Windows approval and its interactive installer remain your choice."}
                 </p>
               </details>
               <button
