@@ -76,7 +76,7 @@ class ProtectionTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'different GPU'): p.gpu_reading({'gpuUuid': 'GPU-wrong'})
 
     def test_missing_cpu_blocks_before_converter_spawn(self):
-        torch = SimpleNamespace(cuda=SimpleNamespace(is_available=lambda: True, get_device_properties=lambda n: SimpleNamespace(uuid='test')))
+        torch = SimpleNamespace(cuda=SimpleNamespace(is_available=lambda: True, get_device_name=lambda n: "Test GPU", get_device_properties=lambda n: SimpleNamespace(uuid='test')))
         with patch.dict(sys.modules, torch=torch), patch.object(p, 'status', return_value=dict(reading(), ready=False, cpu={'state':'unavailable','message':'CPU missing'})), patch.object(p.subprocess, 'Popen') as spawn:
             with self.assertRaisesRegex(ValueError, 'not started'): p.supervise({}, {}, lambda *a, **k: None)
             spawn.assert_not_called()
@@ -84,7 +84,7 @@ class ProtectionTests(unittest.TestCase):
     @unittest.skipUnless(os.name == 'nt', 'Windows process-tree integration')
     def test_hot_reading_stops_real_dummy_tree_and_keeps_unrelated_process(self):
         real_popen = subprocess.Popen
-        torch = SimpleNamespace(cuda=SimpleNamespace(is_available=lambda: True, get_device_properties=lambda n: SimpleNamespace(uuid='test')))
+        torch = SimpleNamespace(cuda=SimpleNamespace(is_available=lambda: True, get_device_name=lambda n: "Test GPU", get_device_properties=lambda n: SimpleNamespace(uuid='test')))
         processes = []
         with tempfile.TemporaryDirectory() as d:
             # The actual child spawns a descendant; only this tree may be stopped.
@@ -120,7 +120,7 @@ class ProtectionTests(unittest.TestCase):
     @unittest.skipUnless(os.name == 'nt', 'Windows process-tree cleanup')
     def test_supervisor_failure_does_not_leave_dummy_converter_running(self):
         real_popen = subprocess.Popen
-        torch = SimpleNamespace(cuda=SimpleNamespace(is_available=lambda: True, get_device_properties=lambda n: SimpleNamespace(uuid='test')))
+        torch = SimpleNamespace(cuda=SimpleNamespace(is_available=lambda: True, get_device_name=lambda n: "Test GPU", get_device_properties=lambda n: SimpleNamespace(uuid='test')))
         processes = []
         def launch(command, *args, **kwargs):
             if command[-1] != 'convert': return real_popen(command, *args, **kwargs)

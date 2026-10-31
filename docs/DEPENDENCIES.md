@@ -22,6 +22,10 @@ Application source and dependency manifests are included. Multi-gigabyte runtime
 
 `requirements/engine-manifest.json` records commits, URLs and hashes. Upstream release digests are distinguished from locally measured hashes. Local hashes detect changes; they are not independent signatures. A changed file fails verification rather than silently selecting another version.
 
+## CPU compatibility preview
+
+For Windows without NVIDIA, use `--profile cpu` in the commands below, with a new engine folder. This installs official CPU-only PyTorch/torchvision and omits RIFE downloads. CPU exports are SDR/original FPS only; see [compatibility](COMPATIBILITY.md). An NVIDIA driver is required only for the CUDA profile.
+
 ## Commands
 
 ```powershell
@@ -43,9 +47,9 @@ The sensor archive includes PawnIO setup. Review its signature and install it in
 
 ## Manual configuration
 
-`engine.json` fields: `python`, `iw3Repo`, `ffmpeg`, `ffprobe`, `cache`, `rifeRepo`, `rifeModel`, `sensorLibrary`, `outputDir`, `thermalMode`. The RIFE directory needs `flownet.pkl` and its Python inference files. `cache` becomes `NUNIF_HOME`; checkpoints are beneath `iw3/pretrained_models/hub/checkpoints`.
+`engine.json` fields: `python`, `iw3Repo`, `ffmpeg`, `ffprobe`, `cache`, `rifeRepo`, `rifeModel`, `sensorLibrary`, `outputDir`, `thermalMode`, `backend` (`auto`, `cuda`, `cpu`). The RIFE directory needs `flownet.pkl` and its Python inference files. `cache` becomes `NUNIF_HOME`; checkpoints are beneath `iw3/pretrained_models/hub/checkpoints`.
 
-The app checks CUDA and a small synthetic NVENC encode. First-use weights may be downloaded if omitted; `--download-models` prefetches recorded defaults. Inference is local; dependency downloads require network access.
+The app checks the selected backend and a small synthetic NVENC or software H.264 encode. First-use weights may be downloaded if omitted; `--download-models` prefetches recorded defaults. Inference is local; dependency downloads require network access.
 
 ## Distribution and validation
 

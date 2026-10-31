@@ -1,6 +1,6 @@
 [package]
-name = "cineverse-desktop"
-version = "0.4.0"
+name = "cineverse-compatibility"
+version = "0.5.0"
 description = "Local stereo movie conversion"
 edition = "2021"
 

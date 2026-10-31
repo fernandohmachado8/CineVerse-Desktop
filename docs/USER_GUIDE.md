@@ -75,3 +75,7 @@ npm run tauri -- build --bundles nsis
 `worker/worker.py` accepts JSON on stdin (`config`, `request`) and modes `check`, `probe`, `plan`, `jobs`, `discover`, `thermal`, `sensor`, `run`. `sensor` requires the parent app PID. `run` is supervised; `convert` is an internal child command and must not be used to bypass supervision. Job progress is NDJSON; estimates during conversion describe the current pass. All child commands use argument arrays without shell interpolation. Only explicitly selected source/output files enter the asset scope. Single-instance handling prevents accidental duplicate application windows.
 
 See [validation](VALIDATION.md), [dependency setup](DEPENDENCIES.md) and [third-party notices](../THIRD_PARTY_NOTICES.md). The installer is unsigned. A full film requires its own quality review and explicit launch.
+
+## CPU compatibility preview
+
+Choose **CPU compatibility** for Windows without NVIDIA. Use an SDR source and Original FPS; the app blocks HDR and smoothing rather than silently changing the source format. Output is at most 1280 pixels per eye. Enable CPU sensing before previewing. GPU-only protection is not available in this profile. Start with three seconds: CPU inference may take substantially longer than GPU inference. See [setup and limitations](COMPATIBILITY.md).

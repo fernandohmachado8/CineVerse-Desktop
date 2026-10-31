@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 import shutil
 
-LABELS = {'python': 'CUDA Python', 'iw3Repo': 'iw3', 'ffmpeg': 'FFmpeg', 'ffprobe': 'FFprobe',
+LABELS = {'python': 'AI Python', 'iw3Repo': 'iw3', 'ffmpeg': 'FFmpeg', 'ffprobe': 'FFprobe',
           'cache': 'Model cache', 'rifeRepo': 'RIFE code', 'rifeModel': 'RIFE weights',
           'sensorLibrary': 'CPU sensor library'}
 
@@ -29,6 +29,7 @@ def discover(current, roots):
             try:
                 saved = json.loads(manifest.read_text(encoding='utf-8-sig'))
                 for key in LABELS: accept(key, saved.get(key))
+                if not result.get('backend') and saved.get('backend') in ('auto','cpu','cuda'): result['backend'] = saved['backend']
                 if not result.get('outputDir') and saved.get('outputDir'): result['outputDir'] = saved['outputDir']
             except (OSError, ValueError, TypeError): pass
         patterns = {'python': ['environments/*/Scripts/python.exe', 'runtime/python*/python.exe'],
@@ -42,5 +43,5 @@ def discover(current, roots):
         if not result.get('outputDir') and root.is_dir(): result['outputDir'] = str(root / 'Movies')
     for key in ('ffmpeg', 'ffprobe'): accept(key, shutil.which(key))
     result.setdefault('thermalMode', 'required')
-    return {'settings': result, 'components': [dict(key=k, label=label, found=exists(k, result.get(k)))
+    return {'settings': result, 'components': [dict(key=k, label=label, found=exists(k, result.get(k)), optional=k in ('rifeRepo','rifeModel'))
             for k, label in LABELS.items()]}

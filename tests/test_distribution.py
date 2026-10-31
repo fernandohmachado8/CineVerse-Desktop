@@ -20,6 +20,16 @@ class DistributionTests(unittest.TestCase):
         self.assertFalse(value['driverInstalledAutomatically'])
         self.assertGreater(len(value['models']), 5)
 
+    def test_cpu_plan_has_cpu_wheels_and_omits_unused_rife(self):
+        manifest = json.loads(setup.MANIFEST.read_text())
+        manifest = {**manifest, **manifest['cpuProfile']}
+        value = setup.plan(Path('engine-example'), manifest, True)
+        self.assertEqual(value['processingBackend'], 'cpu')
+        self.assertTrue(value['torch'].endswith('+cpu'))
+        self.assertTrue(value['torchIndex'].endswith('/cpu'))
+        self.assertNotIn('rife', [r['name'] for r in value['repositories']])
+        self.assertEqual(value['models'], manifest['models'])
+
     def test_every_upstream_checkout_and_asset_is_pinned(self):
         manifest = json.loads(setup.MANIFEST.read_text())
         for repo in manifest['repositories']:

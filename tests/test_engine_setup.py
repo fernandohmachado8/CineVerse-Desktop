@@ -13,13 +13,15 @@ class SetupTests(unittest.TestCase):
             root = Path(d); original = root/'python-custom.exe'; original.touch()
             installed = root/'python.exe'; installed.touch()
             probe = root/'ffprobe.exe'; probe.touch()
-            (root/'engine.json').write_text(json.dumps({'python':str(installed),'ffprobe':str(probe)}))
+            (root/'engine.json').write_text(json.dumps({'python':str(installed),'ffprobe':str(probe),'backend':'cpu'}))
             result = discover({'python':str(original),'ffprobe':'gone','lastVideo':'keep.mkv','outputDir':'chosen'}, [root])
             self.assertEqual(result['settings']['python'], str(original))
             self.assertEqual(result['settings']['ffprobe'], str(probe))
             self.assertEqual(result['settings']['lastVideo'], 'keep.mkv')
             self.assertEqual(result['settings']['outputDir'], 'chosen')
             self.assertEqual(result['settings']['thermalMode'], 'required')
+            self.assertEqual(result['settings']['backend'], 'cpu')
+            self.assertTrue(next(c for c in result['components'] if c['key']=='rifeModel')['optional'])
 
     def test_bounded_layout_detection_and_partial_status(self):
         with tempfile.TemporaryDirectory() as d:

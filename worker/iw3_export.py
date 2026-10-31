@@ -3,6 +3,7 @@
 No changes to the installed iw3 checkout or the original image area.
 """
 import runpy
+import os
 import sys
 from pathlib import Path
 
@@ -27,4 +28,12 @@ def transform(self,x):
 
 OutputTransform.transform=transform
 sys.argv=['iw3',*sys.argv[1:]]
-runpy.run_module('iw3',run_name='__main__')
+if os.environ.get('CINEVERSE_PROCESSING_BACKEND') == 'cpu':
+    # Call the CLI function directly: iw3's module entry probes CUDA contexts
+    # before parsing --gpu, even for a CPU request.
+    torch.set_num_threads(2)
+    torch.set_num_interop_threads(1)
+    from iw3.cli import main
+    main()
+else:
+    runpy.run_module('iw3',run_name='__main__')

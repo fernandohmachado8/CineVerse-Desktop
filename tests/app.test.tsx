@@ -54,17 +54,26 @@ async function setup(
   enoughSpace = true,
   restore = false,
   cpuReady = true,
+  backend = "cuda",
+  checkDelay = 0,
 ) {
-  mock.invoke.mockImplementation(async (name: string) => {
+  mock.invoke.mockImplementation(async (name: string, args: any) => {
     if (name === "load_settings")
       return restore ? { ...settings, lastVideo: "/test/video.mp4" } : settings;
-    if (name === "check_engine")
+    if (name === "check_engine") {
+      if (checkDelay)
+        await new Promise((resolve) => setTimeout(resolve, checkDelay));
       return {
         ready: true,
         gpu: "Test GPU",
+        backend,
+        supportsHDR: backend === "cuda",
+        supports60: backend === "cuda",
+        maxWidth: backend === "cpu" ? 1280 : 1920,
         rifeReady: true,
         gpuUuid: "GPU-test",
       };
+    }
     if (name === "thermal_status")
       return {
         ready: cpuReady,
@@ -93,7 +102,9 @@ async function setup(
         hasAudio: true,
       };
     if (name === "list_jobs") return [];
-    if (name === "plan_conversion")
+    if (name === "plan_conversion") {
+      if (backend === "cpu" && args.request.fpsMode !== "original")
+        throw Error("CPU startup planned unsupported FPS");
       return {
         spaceBudgetBytes: 4e9,
         freeBytes: 40e9,
@@ -103,6 +114,7 @@ async function setup(
         outputEstimateBytesLow: 3e8,
         outputEstimateBytesHigh: 8e8,
       };
+    }
     if (name === "start_job") return "job-1";
   });
   render(<App />);
@@ -112,7 +124,7 @@ async function setup(
       mock.drop({ payload: { type: "drop", paths: ["/test/video.mp4"] } }),
     );
   await screen.findByText("video.mp4");
-  await screen.findByLabelText("Full movie estimate");
+  await screen.findByLabelText("Full movie estimate", {}, { timeout: 3000 });
   await waitFor(() =>
     expect(
       screen.getByLabelText("Temperature protection").textContent,
@@ -124,6 +136,61 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 describe("Desktop conversion flow", () => {
+  it("waits for CPU capability detection before planning a restored video", async () => {
+    await setup(false, true, true, true, "cpu", 500);
+    expect(
+      screen.queryByText("CPU startup planned unsupported FPS"),
+    ).toBeNull();
+    const plans = mock.invoke.mock.calls.filter(
+      ([name]) => name === "plan_conversion",
+    );
+    expect(plans.length).toBeGreaterThan(0);
+    expect(
+      plans.every(
+        ([, args]) =>
+          args.settings.resolvedBackend === "cpu" &&
+          args.request.fpsMode === "original",
+      ),
+    ).toBe(true);
+  });
+  it("uses original FPS and required CPU sensing in CPU compatibility mode", async () => {
+    await setup(false, true, false, true, "cpu");
+    expect(
+      (screen.getByText("Smooth 60 FPS").closest("button") as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(screen.queryByLabelText("Required temperature sensors")).toBeNull();
+    fireEvent.click(screen.getByText("Generate preview"));
+    await waitFor(() =>
+      expect(mock.invoke).toHaveBeenCalledWith(
+        "start_job",
+        expect.objectContaining({
+          settings: expect.objectContaining({ resolvedBackend: "cpu" }),
+          request: expect.objectContaining({
+            fpsMode: "original",
+            preview: true,
+            strength: 1.5,
+          }),
+        }),
+      ),
+    );
+  });
+  it("blocks HDR in CPU mode without starting a conversion", async () => {
+    await setup(true, true, false, true, "cpu");
+    expect(
+      (screen.getByText("Generate preview") as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(mock.invoke.mock.calls.some(([name]) => name === "start_job")).toBe(
+      false,
+    );
+  });
+  it("blocks CPU conversion when CPU sensing is unavailable", async () => {
+    await setup(false, true, false, false, "cpu");
+    expect(
+      (screen.getByText("Generate preview") as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(screen.queryByLabelText("Required temperature sensors")).toBeNull();
+  });
   it("blocks preview and full conversion without required CPU readings", async () => {
     await setup(false, true, false, false);
     expect(

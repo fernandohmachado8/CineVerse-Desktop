@@ -52,7 +52,33 @@ class ProcessTree:
             self.kernel.CloseHandle(self.handle); self.handle = None
 
 
+def limit_cpu_process(child=None):
+    """Bound the entire inherited Windows process tree to two logical CPUs.
+
+    Library thread settings alone do not constrain PyAV/codec worker pools.
+    Fail closed if the requested load budget cannot be applied.
+    """
+    if os.name != 'nt': return
+    import ctypes as c
+    from ctypes import wintypes as w
+    kernel = c.WinDLL('kernel32', use_last_error=True)
+    kernel.GetProcessAffinityMask.argtypes = [w.HANDLE, c.POINTER(c.c_size_t), c.POINTER(c.c_size_t)]
+    kernel.SetProcessAffinityMask.argtypes = [w.HANDLE, c.c_size_t]
+    kernel.SetPriorityClass.argtypes = [w.HANDLE, w.DWORD]
+    handle = int(child._handle) if child is not None else -1  # current-process pseudo-handle
+    allowed, system = c.c_size_t(), c.c_size_t()
+    if not kernel.GetProcessAffinityMask(handle, c.byref(allowed), c.byref(system)):
+        raise c.WinError(c.get_last_error())
+    bits = [1 << n for n in range(c.sizeof(c.c_size_t) * 8) if allowed.value & (1 << n)]
+    if not bits or not kernel.SetProcessAffinityMask(handle, sum(bits[:2])):
+        raise c.WinError(c.get_last_error())
+    if not kernel.SetPriorityClass(handle, 0x4000):  # BELOW_NORMAL_PRIORITY_CLASS
+        raise c.WinError(c.get_last_error())
+
+
 def mode(config):
+    if config.get('resolvedBackend') == 'cpu' or config.get('backend') == 'cpu':
+        return 'cpu'
     value = config.get('thermalMode', 'required')
     if value not in ('required', 'gpu'):
         raise ValueError('Choose CPU + GPU protection or explicitly select GPU only.')
@@ -70,7 +96,7 @@ def shell_path(value):
 def cpu_reading(config, now=None):
     path = config.get('cpuSensorFile')
     if not path:
-        raise ValueError('Enable the CPU sensor before converting, or explicitly choose GPU-only protection.')
+        raise ValueError('Enable the CPU sensor before converting. CPU compatibility requires CPU sensing.' if mode(config)=='cpu' else 'Enable the CPU sensor before converting, or explicitly choose GPU-only protection.')
     sample = Path(path)
     error = sample.with_name('sensor-error.json')
     if error.is_file():
@@ -107,16 +133,20 @@ def gpu_reading(config):
 
 def status(config):
     result = {'mode': mode(config), 'limits': LIMITS, 'ready': True, 'gpuUuid': config.get('gpuUuid')}
+    required = ['cpu'] if result['mode'] == 'cpu' else ['gpu'] if result['mode'] == 'gpu' else ['cpu', 'gpu']
     for name, reader in [('cpu', cpu_reading), ('gpu', gpu_reading)]:
+        if name == 'gpu' and result['mode'] == 'cpu':
+            result[name] = {'state': 'not_used', 'message': 'CPU processing does not use or monitor a GPU.'}
+            continue
         try:
             value = reader(config)
             result[name] = {'state': 'ready', 'c': value}
             if value >= LIMITS[name]['immediateC']:
                 result[name].update(state='too_hot', message=f'{name.upper()} is above its immediate cutoff. Allow the PC to cool.')
-                if name == 'gpu' or result['mode'] == 'required': result['ready'] = False
+                if name in required: result['ready'] = False
         except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as exc:
             result[name] = {'state': 'unavailable', 'message': str(exc)}
-            if name == 'gpu' or result['mode'] == 'required':
+            if name in required:
                 result['ready'] = False
     return result
 
@@ -125,7 +155,7 @@ class Monitor:
     """Monotonic sustained limits; every required sensor fails closed after 30 s."""
     def __init__(self, config, now):
         self.config = config
-        self.names = ['cpu', 'gpu'] if mode(config) == 'required' else ['gpu']
+        self.names = ['cpu'] if mode(config) == 'cpu' else ['cpu', 'gpu'] if mode(config) == 'required' else ['gpu']
         self.policies = {n: Policy(n.upper(), LIMITS[n]['sustainedC'], LIMITS[n]['immediateC']) for n in self.names}
         self.last_good = {n: now for n in self.names}
 
@@ -212,15 +242,18 @@ def start_cpu(config, parent_pid):
 def supervise(config, request, emit):
     # Bind independently of a stale UI configuration to the device used by iw3/RIFE.
     import torch
-    if not torch.cuda.is_available():
-        raise ValueError('CUDA is unavailable; conversion was not started.')
-    config = dict(config, gpuUuid='GPU-' + str(torch.cuda.get_device_properties(0).uuid).removeprefix('GPU-'))
+    from hardware import capabilities
+    profile = capabilities(config, torch, probe=bool(config.get('ffmpeg')))
+    config = dict(config, backend=profile['backend'], resolvedBackend=profile['backend'], gpuUuid=profile.get('gpuUuid'))
+    if profile['backend'] == 'cpu':
+        # Hide CUDA even when explicitly testing compatibility on an NVIDIA PC.
+        os.environ['CUDA_VISIBLE_DEVICES'] = ''
     initial = status(config)
     last_reading = initial
     emit('thermal', **initial, state='checking')
     if not initial['ready']:
         missing = [initial[n].get('message', n) for n in ('cpu', 'gpu')
-                   if initial[n]['state'] != 'ready' and (n == 'gpu' or initial['mode'] == 'required')]
+                   if initial[n]['state'] != 'ready' and n in (['cpu'] if initial['mode'] == 'cpu' else ['gpu'] if initial['mode'] == 'gpu' else ['cpu', 'gpu'])]
         raise ValueError('Temperature protection could not arm. Conversion was not started. ' + ' '.join(missing))
     monitor = Monitor(config, time.monotonic())
     reason = monitor.sample(time.monotonic(), initial)
@@ -259,6 +292,7 @@ def supervise(config, request, emit):
             audit.clear()
         emit(event['type'], **{k: v for k, v in event.items() if k != 'type'})
     try:
+        if profile['backend'] == 'cpu': limit_cpu_process(child)
         tree = ProcessTree(child)
         target = identity(child.pid)
         if not target: raise RuntimeError('Conversion process ended before protection was attached.')

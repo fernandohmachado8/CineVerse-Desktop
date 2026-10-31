@@ -17,6 +17,10 @@ A Windows desktop application that turns local videos into full side-by-side ste
 
 *Actual interface in browser-preview mode. Native processing is disabled; no movie or private settings are shown.*
 
+## Compatibility preview
+
+The `feature/windows-cpu-compatibility` branch adds a separate **Windows CPU compatibility preview (0.5)**. It supports SDR/original FPS without NVIDIA, software H.264 and a bounded two-processor workload; HDR and 60 FPS remain NVIDIA features. The working 0.4 baseline stays on `main`. See [profiles, setup and measured limits](docs/COMPATIBILITY.md). This is not yet certified on most PCs.
+
 ## Features
 
 - Drop a video, choose an output folder and generate a bounded preview before a long job.
@@ -65,13 +69,13 @@ python -m unittest discover -s tests -v
 npm run tauri -- build --bundles nsis
 ```
 
-The unsigned installer packages the interface and application adapters. GPU drivers, CUDA Python, FFmpeg and model weights are installed separately. Building this repository does not replace the original working CineVerse installation.
+The unsigned installer packages the interface and application adapters. GPU drivers where needed, AI Python, FFmpeg and model weights are installed separately. Building this repository does not replace the original working CineVerse installation.
 
 ## Engine dependencies
 
 Included: **npm/Cargo lockfiles, the tested Python environment snapshot, pinned upstream commits, model/download URLs and SHA-256 hashes**, plus a setup helper. Dependencies keep their upstream licenses and are fetched into a separate directory instead of being committed as binaries.
 
-Install Windows x64 Python **3.12**, Git and a compatible NVIDIA driver. Review [dependency setup](docs/DEPENDENCIES.md) and [licenses](THIRD_PARTY_NOTICES.md). Planning downloads nothing:
+Install Windows x64 Python **3.12** and Git; the NVIDIA profile also needs a compatible NVIDIA driver. Review [dependency setup](docs/DEPENDENCIES.md) and [licenses](THIRD_PARTY_NOTICES.md). Planning downloads nothing:
 
 ```powershell
 py -3.12 scripts/setup_engine.py --root "D:/CineVerse" --download-models
@@ -89,8 +93,9 @@ Then choose **Locate engine folder** in the app. CPU sensing requires the offici
 
 ## Measured validation
 
-- The standalone app has **71 passing local tests**: 43 Python worker/setup/protection/distribution tests, 14 React tests and 14 Windows legacy watchdog tests.
-- Worker-CLI and **native button-driven three-second HDR/60 FPS previews** completed on an RTX 4090: 181 verified frames, preserved HDR10/prepared audio, zero timestamp-grid error and compatibility margins.
+- The compatibility branch has **84 passing local tests**: 52 Python worker/setup/protection/distribution tests, 18 React tests and 14 Windows legacy watchdog tests.
+- A CPU-only synthetic three-second preview passed in **160.531 seconds**, versus **17.360 seconds** on the NVIDIA regression. These are single-workstation pipeline tests, not broad-PC performance claims; see [measurements](docs/VALIDATION.md).
+- Historical 0.4 worker-CLI and **native button-driven three-second HDR/60 FPS previews** completed on an RTX 4090: 181 verified frames, preserved HDR10/prepared audio, zero timestamp-grid error and compatibility margins.
 - The native run had 20 valid monitoring samples: CPU **73–86 °C**, GPU core **39.88–60.36 °C**. These short observations do not establish overnight or whole-film thermal reliability.
 - Fault tests terminate disposable process trees, preserve unrelated processes and check cleanup after monitor failure. Hardware was not deliberately overheated.
 

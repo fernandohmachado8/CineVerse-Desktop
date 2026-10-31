@@ -46,7 +46,7 @@ def verified_download(asset, file):
         return file
     file.parent.mkdir(parents=True, exist_ok=True)
     partial = file.with_suffix(file.suffix + '.part')
-    request = urllib.request.Request(asset['url'], headers={'User-Agent': 'CineVerse-Desktop-setup/0.4'})
+    request = urllib.request.Request(asset['url'], headers={'User-Agent': 'CineVerse-Desktop-setup/0.5'})
     with urllib.request.urlopen(request, timeout=60) as response, partial.open('wb') as out:
         shutil.copyfileobj(response, out)
     if digest(partial) != asset['sha256']:
@@ -77,9 +77,10 @@ def checkout(asset, root):
 
 def plan(root, manifest, models=False):
     return {'root': str(root), 'platform': manifest['platform'], 'python': manifest['python'],
-        'repositories': manifest['repositories'], 'torch': manifest['torch'], 'torchIndex': manifest['torchIndex'],
+        'repositories': [r for r in manifest['repositories'] if manifest.get('processingBackend','cuda') != 'cpu' or r['name'] != 'rife'], 'torch': manifest['torch'], 'torchIndex': manifest['torchIndex'],
         'archives': [manifest['ffmpeg'], manifest['sensor']],
-        'models': manifest['models'] + [manifest['rifeModel']] if models else [],
+        'models': manifest['models'] + ([manifest['rifeModel']] if manifest.get('processingBackend','cuda')=='cuda' else []) if models else [],
+        'processingBackend':manifest.get('processingBackend','cuda'),
         'driverInstalledAutomatically': False, 'startsConversion': False,
         'note': 'Plan only unless --install is supplied. Review THIRD_PARTY_NOTICES.md before downloading.'}
 
@@ -93,13 +94,16 @@ def install(root, manifest, models, rife_archive=None):
     root.mkdir(parents=True, exist_ok=True)
     if shutil.disk_usage(root).free < 15 * 1024**3:
         raise ValueError('Allow at least 15 GiB of free space for engine installation, excluding movie workspaces.')
-    env = root / 'environments/desktop-v04'
+    backend=manifest.get('processingBackend','cuda')
+    env = root / ('environments/desktop-v05-'+backend)
     python = env / 'Scripts/python.exe'
     if not python.exists(): execute([sys.executable, '-m', 'venv', env])
     execute([python, '-m', 'pip', 'install', 'torch==' + manifest['torch'],
              'torchvision==' + manifest['torchvision'], '--index-url', manifest['torchIndex']])
     execute([python, '-m', 'pip', 'install', '-r', REPO / 'requirements/engine-win-py312.txt'])
-    for asset in manifest['repositories']: checkout(asset, root)
+    for asset in manifest['repositories']:
+        if backend=='cpu' and asset['name']=='rife':continue
+        checkout(asset, root)
     downloads = root / 'downloads'
     ffmpeg_zip = verified_download(manifest['ffmpeg'], downloads / 'ffmpeg-9.0.2.zip')
     safe_extract(ffmpeg_zip, root / 'tools/ffmpeg')
@@ -110,6 +114,7 @@ def install(root, manifest, models, rife_archive=None):
     if models:
         checkpoints = cache / 'iw3/pretrained_models/hub/checkpoints'
         for asset in manifest['models']: verified_download(asset, checkpoints / asset['name'])
+    if models and backend=='cuda':
         archive = Path(rife_archive) if rife_archive else downloads / 'rife425.zip'
         if rife_archive and not archive.is_file():
             raise ValueError('The supplied RIFE archive does not exist.')
@@ -127,7 +132,7 @@ def install(root, manifest, models, rife_archive=None):
         'ffprobe': str(ffmpeg.with_name('ffprobe.exe')), 'cache': str(cache),
         'rifeRepo': str(root / 'tools/Practical-RIFE'), 'rifeModel': str(train_log),
         'sensorLibrary': str(root / 'tools/thermal-guard/LibreHardwareMonitor'),
-        'outputDir': str(root / 'Movies'), 'thermalMode': 'required'}
+        'outputDir': str(root / 'Movies'), 'thermalMode': 'required', 'backend':backend}
     (root / 'engine.json').write_text(json.dumps(config, indent=2), encoding='utf8')
     print('Engine manifest created. Use Locate engine folder in the app.')
     print('CPU sensing still requires the signed PawnIO installer and explicit administrator approval in the app.')
@@ -136,16 +141,19 @@ def install(root, manifest, models, rife_archive=None):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--profile',choices=['cuda','cpu'],default='cuda',help='CPU profile works without an NVIDIA GPU; SDR/original FPS only')
     parser.add_argument('--root', type=Path, required=True, help='Separate engine directory, e.g. D:/CineVerse')
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--install', action='store_true', help='Install the pinned engine; downloads several GB')
-    group.add_argument('--check', action='store_true', help='Read the existing manifest and run GPU/NVENC checks only')
+    group.add_argument('--check', action='store_true', help='Read the existing manifest and run selected-profile checks only')
     parser.add_argument('--download-models', action='store_true', help='Also fetch and verify the pinned model files')
     parser.add_argument('--rife-archive', type=Path, help='Official local 4.25 ZIP if Google Drive is unavailable')
     args = parser.parse_args(); root = args.root.expanduser().resolve()
     if args.rife_archive and not args.download_models:
         raise ValueError('--rife-archive requires --download-models.')
     manifest = json.loads(MANIFEST.read_text(encoding='utf8'))
+    if args.profile=='cpu':manifest={**manifest,**manifest['cpuProfile']}
+    else:manifest['processingBackend']='cuda'
     if root == REPO or root.is_relative_to(REPO): raise ValueError('Keep the engine outside the source repository.')
     if args.check:
         config = json.loads((root / 'engine.json').read_text(encoding='utf-8-sig'))
