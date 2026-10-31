@@ -58,6 +58,7 @@ async function setup(
   cpuReady = true,
   backend = "cuda",
   checkDelay = 0,
+  captureDrop?: (callback: any) => void,
 ) {
   mock.invoke.mockImplementation(async (name: string, args: any) => {
     if (name === "setup_info") return { defaultRoot: "/engine-managed" };
@@ -121,6 +122,7 @@ async function setup(
     if (name === "start_job") return "job-1";
   });
   render(<App />);
+  captureDrop?.(mock.drop);
   await screen.findByText("Test GPU");
   if (!restore)
     await act(async () =>
@@ -139,6 +141,25 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 describe("Desktop conversion flow", () => {
+  it("keeps current engine paths when an early native drop subscription fires", async () => {
+    let earlyDrop: any;
+    await setup(false, true, false, true, "cuda", 0, (callback) => {
+      earlyDrop = callback;
+    });
+    await act(async () =>
+      earlyDrop({ payload: { type: "drop", paths: ["/test/other.mp4"] } }),
+    );
+    await waitFor(() =>
+      expect(mock.invoke).toHaveBeenCalledWith("save_settings", {
+        settings: expect.objectContaining({
+          lastVideo: "/test/other.mp4",
+          python: "/engine/python",
+          outputDir: "/exports",
+        }),
+      }),
+    );
+  });
+
   it("requires download consent and a destination before installing dependencies", async () => {
     await setup();
     fireEvent.click(screen.getByLabelText("Engine settings"));

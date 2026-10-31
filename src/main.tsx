@@ -328,21 +328,27 @@ export function App() {
       void sub.then((unlisten) => unlisten());
     };
   }, []);
+  // Native event subscriptions can settle after a settings update. Keep one
+  // subscription and read the latest handler instead of capturing old paths.
+  const nativeDrop = useRef<(event: any) => void>(() => {});
+  nativeDrop.current = (event) => {
+    setDragging(
+      event.payload.type === "over" || event.payload.type === "enter",
+    );
+    if (event.payload.type === "drop" && !busy && !setupBusy) {
+      const file = event.payload.paths[0];
+      if (file) void loadVideo(file);
+    }
+  };
   useEffect(() => {
     if (!native) return;
-    const sub = getCurrentWebview().onDragDropEvent((event) => {
-      setDragging(
-        event.payload.type === "over" || event.payload.type === "enter",
-      );
-      if (event.payload.type === "drop" && !busy) {
-        const file = event.payload.paths[0];
-        if (file) void loadVideo(file);
-      }
-    });
+    const sub = getCurrentWebview().onDragDropEvent((event) =>
+      nativeDrop.current(event),
+    );
     return () => {
       void sub.then((unlisten) => unlisten());
     };
-  }, [settings, busy]);
+  }, []);
   useEffect(() => {
     if (!busy) return;
     const timer = setInterval(() => setNow(Date.now()), 1000);
