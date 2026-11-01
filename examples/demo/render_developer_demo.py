@@ -205,7 +205,8 @@ def main():
                 panel(im,(x,265,x+520,486));block(im,(x+25,287,470,45),label,23,GREEN,True)
                 block(im,(x+25,348,470,70),limit,40,bold=True)
                 block(im,(x+25,421,470,45),detail,25,MUTED)
-            put(im,capture('03-ready.jpg',(420,308,1175,545)),(770,552,1070,360))
+            # Unedited recorded readiness panel; pointer lies outside the crop.
+            put(im,capture('06-complete.jpg',(420,308,1175,545)),(770,552,1070,360))
             block(im,(790,939,1040,40),'Actual readiness capture; no thermal trip was induced.',23,MUTED)
         elif i==7:
             left(im,'RECOVERY / INTEGRITY','Reuse stages,\nnot assumptions.',

@@ -84,7 +84,8 @@ def main():
         'source':capture('01-source.jpg',(0,32,1205,890)),
         'setup':capture('08-setup-private.jpg',(330,91,866,641)),
         'controls':capture('02-controls.jpg',(48,158,380,547)),
-        'ready':capture('03-ready.jpg',(420,308,1175,545)),
+        # Use an untouched recorded panel with the pointer outside this crop.
+        'ready':capture('06-complete.jpg',(420,308,1175,545)),
         'started':capture('04-started.jpg',(420,562,1175,752)),
         'done':capture('06-complete.jpg',(420,551,1175,802)),
     }
