@@ -6,7 +6,10 @@
 
 [![Public preview](https://img.shields.io/badge/public_preview-0.8.1-87b99a)](https://github.com/fernandohmachado8/CineVerse-Desktop/releases/tag/v0.8.1-auto-setup-preview) ![Windows x64](https://img.shields.io/badge/Windows-x64-0078D4) [![License](https://img.shields.io/badge/application_code-MIT-green)](LICENSE)
 
-[**Download for Windows**](https://github.com/fernandohmachado8/CineVerse-Desktop/releases/download/v0.8.1-auto-setup-preview/CineVerse-Automatic-Setup-Preview-0.8.1-x64-setup.exe) · [Setup guide](https://github.com/fernandohmachado8/CineVerse-Desktop/blob/v0.8.1-auto-setup-preview/docs/AUTOMATIC_HARDWARE_SETUP.md) · [Compare apps](docs/COMPARISON.md) · [0.8.1 source](https://github.com/fernandohmachado8/CineVerse-Desktop/tree/v0.8.1-auto-setup-preview)
+[**Download for Windows**](https://github.com/fernandohmachado8/CineVerse-Desktop/releases/download/v0.8.1-auto-setup-preview/CineVerse-Automatic-Setup-Preview-0.8.1-x64-setup.exe) · [**Download for Mac (Apple Silicon)**](https://github.com/fernandohmachado8/CineVerse-Desktop/releases/download/v0.7.0-macos-preview/CineVerse.Mac.Preview_0.7.0_aarch64.dmg) · [Setup guide](https://github.com/fernandohmachado8/CineVerse-Desktop/blob/v0.8.1-auto-setup-preview/docs/AUTOMATIC_HARDWARE_SETUP.md) · [Compare apps](docs/COMPARISON.md) · [0.8.1 source](https://github.com/fernandohmachado8/CineVerse-Desktop/tree/v0.8.1-auto-setup-preview)
+
+
+**Mac preview 0.7:** M1 or newer, macOS 14+, SDR at Original FPS. Not notarized. [Mac setup instructions](https://github.com/fernandohmachado8/CineVerse-Desktop/blob/v0.7.0-macos-preview/docs/MACOS.md).
 
 </div>
 
@@ -18,7 +21,7 @@ CineVerse combines an inspectable desktop workflow with established open-source 
 
 _Actual Windows 0.8.1 interface before engine setup. No movie, generated scene or private path is shown._
 
-## Get started
+## Get started on Windows
 
 1. **Install the Windows preview.** No Python, Git or developer tools are needed.
 2. In **Engine settings**, keep **Automatic**, choose an engine drive, acknowledge the downloads and click **Install engine automatically**. The app saves all dependency paths.
