@@ -29,6 +29,12 @@
       "source": "examples/demo/render_walkthrough.py; actual native app captures and original 2D sample",
       "content": "Product walkthrough poster with original analytical artwork and play badge; no movie footage, account data or private paths",
       "license": "MIT artwork and application; attributed UI dependencies"
+    },
+    "developer-demo-poster-0.8.1.jpg": {
+      "sha256": "953ead4943e01dca2f7b327a4830dd6ccf84c3acfefd5de0159783bc81bef097",
+      "source": "examples/demo/render_developer_demo.py; original analytical sample and explanatory graphic cover",
+      "content": "Developer walkthrough poster; original artwork, implementation text and play badge; no film footage or private information",
+      "license": "MIT artwork and application; attributed UI dependencies"
     }
   }
 }

@@ -18,11 +18,11 @@ CineVerse combines an inspectable desktop workflow with established open-source 
 
 ## See it in action
 
-[![Watch the 86-second CineVerse Desktop demo and quick-start tutorial](docs/assets/demo-poster-0.8.1.jpg)](https://github.com/fernandohmachado8/CineVerse-Desktop/releases/download/v0.8.1-auto-setup-preview/CineVerse-Desktop-Demo-0.8.1.mp4)
+[![Watch the CineVerse developer walkthrough: architecture, inference and verification](docs/assets/developer-demo-poster-0.8.1.jpg)](https://github.com/fernandohmachado8/CineVerse-Desktop/releases/download/v0.8.1-auto-setup-preview/CineVerse-Developer-Demo-0.8.1.mp4)
 
-[**Watch the demo — 1:26, 1080p MP4**](https://github.com/fernandohmachado8/CineVerse-Desktop/releases/download/v0.8.1-auto-setup-preview/CineVerse-Desktop-Demo-0.8.1.mp4) · [**Follow the tutorial**](docs/DEMO_TUTORIAL.md) · [**Try the SBS sample in VR**](https://github.com/fernandohmachado8/CineVerse-Desktop/releases/download/v0.8.1-auto-setup-preview/CineVerse-Sample-SBS-Depth-1.5.mp4)
+[**Developer walkthrough — 2:58, 1080p MP4**](https://github.com/fernandohmachado8/CineVerse-Desktop/releases/download/v0.8.1-auto-setup-preview/CineVerse-Developer-Demo-0.8.1.mp4) · [Technical notes and evidence](docs/DEVELOPER_DEMO.md) · [**Original quick start — 1:26**](https://github.com/fernandohmachado8/CineVerse-Desktop/releases/download/v0.8.1-auto-setup-preview/CineVerse-Desktop-Demo-0.8.1.mp4)
 
-Captioned, silent walkthrough of real Windows 0.8.1 screens and an actual AI conversion of original animated artwork. The engine was installed beforehand; setup and processing are condensed. The sample uses **depth 1.5 + Neural, SDR, 24 FPS**. This is a functional demonstration, not a movie-quality or speed benchmark. Download the separate SBS sample to experience binocular depth in a headset. [Source, credits and verification](docs/DEMO_TUTORIAL.md#credits-and-reproducibility).
+The developer edition explains React → Rust → Python IPC, relative depth and stereo synthesis, thermal supervision, stage recovery and measured output checks. It combines real Windows 0.8.1 captures, explanatory diagrams and the earlier recorded AI export of original artwork. The engine was installed beforehand; setup and processing are condensed. The sample uses **depth 1.5 + Neural, SDR, 24 FPS**. This is not a movie-quality or speed benchmark. [Follow the tutorial](docs/DEMO_TUTORIAL.md), [inspect the technical description and chapters](docs/DEVELOPER_DEMO_DESCRIPTION.md), or [try the separate SBS sample in VR](https://github.com/fernandohmachado8/CineVerse-Desktop/releases/download/v0.8.1-auto-setup-preview/CineVerse-Sample-SBS-Depth-1.5.mp4).
 
 ![CineVerse Desktop 0.8.1 interface before engine setup, with no movie loaded](docs/assets/interface-preview-0.8.1.jpg)
 
