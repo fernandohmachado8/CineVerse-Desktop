@@ -16,6 +16,14 @@ CineVerse combines an inspectable desktop workflow with established open-source 
 
 **Public preview:** the Windows installer is unsigned. Physical NVIDIA testing covers an RTX 4090; other configurations still need community testing. Radeon acceleration is experimental. Read the [release notes and checksums](https://github.com/fernandohmachado8/CineVerse-Desktop/releases/tag/v0.8.1-auto-setup-preview) before installing.
 
+## See it in action
+
+[![Watch the 86-second CineVerse Desktop demo and quick-start tutorial](docs/assets/demo-poster-0.8.1.jpg)](https://github.com/fernandohmachado8/CineVerse-Desktop/releases/download/v0.8.1-auto-setup-preview/CineVerse-Desktop-Demo-0.8.1.mp4)
+
+[**Watch the demo — 1:26, 1080p MP4**](https://github.com/fernandohmachado8/CineVerse-Desktop/releases/download/v0.8.1-auto-setup-preview/CineVerse-Desktop-Demo-0.8.1.mp4) · [**Follow the tutorial**](docs/DEMO_TUTORIAL.md) · [**Try the SBS sample in VR**](https://github.com/fernandohmachado8/CineVerse-Desktop/releases/download/v0.8.1-auto-setup-preview/CineVerse-Sample-SBS-Depth-1.5.mp4)
+
+Captioned, silent walkthrough of real Windows 0.8.1 screens and an actual AI conversion of original animated artwork. The engine was installed beforehand; setup and processing are condensed. The sample uses **depth 1.5 + Neural, SDR, 24 FPS**. This is a functional demonstration, not a movie-quality or speed benchmark. Download the separate SBS sample to experience binocular depth in a headset. [Source, credits and verification](docs/DEMO_TUTORIAL.md#credits-and-reproducibility).
+
 ![CineVerse Desktop 0.8.1 interface before engine setup, with no movie loaded](docs/assets/interface-preview-0.8.1.jpg)
 
 _Actual Windows 0.8.1 interface before engine setup. No movie, generated scene or private path is shown._
