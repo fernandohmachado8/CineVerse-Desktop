@@ -24,9 +24,9 @@ CineVerse combines an inspectable desktop workflow with established open-source 
 
 The developer edition explains React → Rust → Python IPC, relative depth and stereo synthesis, thermal supervision, stage recovery and measured output checks. It combines real Windows 0.8.1 captures, explanatory diagrams and the earlier recorded AI export of original artwork. The engine was installed beforehand; setup and processing are condensed. The sample uses **depth 1.5 + Neural, SDR, 24 FPS**. This is not a movie-quality or speed benchmark. [Follow the tutorial](docs/DEMO_TUTORIAL.md), [inspect the technical description and chapters](docs/DEVELOPER_DEMO_DESCRIPTION.md), or [try the separate SBS sample in VR](https://github.com/fernandohmachado8/CineVerse-Desktop/releases/download/v0.8.1-auto-setup-preview/CineVerse-Sample-SBS-Depth-1.5.mp4).
 
-![CineVerse Desktop 0.8.1 interface before engine setup, with no movie loaded](docs/assets/interface-preview-0.8.1.jpg)
+![CineVerse Desktop 0.8.1 native startup interface with an empty screening room](docs/assets/interface-preview-0.8.1-clean.jpg)
 
-_Actual Windows 0.8.1 interface before engine setup. No movie, generated scene or private path is shown._
+_Unretouched Windows 0.8.1 startup capture with an empty screening room. Engine and temperature checks are still initializing._
 
 ## Get started on Windows
 
