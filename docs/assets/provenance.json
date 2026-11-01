@@ -17,6 +17,12 @@
       "source": "React interface rendered in browser preview; captured from localhost",
       "content": "actual interface screenshot with no media, paths, account data or GPU job; native conversion disabled",
       "license": "application MIT plus attributed UI dependencies"
+    },
+    "interface-preview-0.8.1.jpg": {
+      "sha256": "85d944c36bb321b626421df869a216ecb00c61b489dbd03066a494ab4e32f76c",
+      "source": "Native CineVerse Desktop 0.8.1 Windows app; computer-use screenshot",
+      "content": "Actual first-run interface before engine setup; no media, private paths, account information or conversion job shown",
+      "license": "application MIT plus attributed UI dependencies"
     }
   }
 }

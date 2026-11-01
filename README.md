@@ -2,108 +2,122 @@
 
 # CineVerse Desktop
 
-**Local 2D → stereoscopic video, built for a VR cinema.**
+**Turn local 2D videos into side-by-side 3D for your VR cinema.**
 
-[![Checks](https://github.com/fernandohmachado8/CineVerse-Desktop/actions/workflows/checks.yml/badge.svg)](https://github.com/fernandohmachado8/CineVerse-Desktop/actions/workflows/checks.yml)
-![Windows](https://img.shields.io/badge/Windows-10%2F11-0078D4)
-![Tauri](https://img.shields.io/badge/Tauri-2-24C8D8)
-![License](https://img.shields.io/badge/license-MIT-green)
+[![Public preview](https://img.shields.io/badge/public_preview-0.8.1-87b99a)](https://github.com/fernandohmachado8/CineVerse-Desktop/releases/tag/v0.8.1-auto-setup-preview) ![Windows x64](https://img.shields.io/badge/Windows-x64-0078D4) [![License](https://img.shields.io/badge/application_code-MIT-green)](LICENSE)
 
-A Windows desktop application that turns local videos into full side-by-side stereo for players such as Bigscreen, with optional motion interpolation, HDR10 preservation and per-conversion temperature supervision.
+[**Download for Windows**](https://github.com/fernandohmachado8/CineVerse-Desktop/releases/download/v0.8.1-auto-setup-preview/CineVerse-Automatic-Setup-Preview-0.8.1-x64-setup.exe) · [Setup guide](https://github.com/fernandohmachado8/CineVerse-Desktop/blob/v0.8.1-auto-setup-preview/docs/AUTOMATIC_HARDWARE_SETUP.md) · [Compare apps](docs/COMPARISON.md) · [0.8.1 source](https://github.com/fernandohmachado8/CineVerse-Desktop/tree/v0.8.1-auto-setup-preview)
 
 </div>
 
-![CineVerse Desktop interface preview](docs/assets/interface-preview.png)
+CineVerse combines an inspectable desktop workflow with established open-source stereo and interpolation engines. Choose a video, preview its depth, and export a full SBS MP4 for Bigscreen or another compatible VR player. Conversion runs on your PC; your source file stays untouched.
 
-*Actual interface in browser-preview mode. Native processing is disabled; no movie or private settings are shown.*
+**Public preview:** the Windows installer is unsigned. Physical NVIDIA testing covers an RTX 4090; other configurations still need community testing. Radeon acceleration is experimental. Read the [release notes and checksums](https://github.com/fernandohmachado8/CineVerse-Desktop/releases/tag/v0.8.1-auto-setup-preview) before installing.
 
-## Features
+![CineVerse Desktop 0.8.1 interface before engine setup, with no movie loaded](docs/assets/interface-preview-0.8.1.jpg)
 
-- Drop a video, choose an output folder and generate a bounded preview before a long job.
-- Adjust stereo depth. **1.5 + neural gap filling** is the tested preferred starting preset; the previous fast method remains available.
-- Keep the original frame rate or synthesize **60 FPS** using RIFE with scene-cut guards.
-- Preserve supported **HDR10 / BT.2020 / PQ**, use FP32 HDR interpolation and encode Main10 HEVC with NVIDIA NVENC. SDR exports use H.264.
-- Follow progress and stage ETA; cancel or recover completed stages after interruption.
-- Require fresh CPU/GPU readings by default and stop the conversion at temperature or sensor-loss limits.
+_Actual Windows 0.8.1 interface before engine setup. No movie, generated scene or private path is shown._
 
-This creates **depth on a virtual movie screen**. It does not reconstruct a walkable world or a 360° movie. The right eye, filled disocclusions and intermediate frames are synthesized and can contain artifacts.
+## Get started
 
-## Engineering demonstrated
+1. **Install the Windows preview.** No Python, Git or developer tools are needed.
+2. In **Engine settings**, keep **Automatic**, choose an engine drive, acknowledge the downloads and click **Install engine automatically**. The app saves all dependency paths.
+3. **Enable temperature protection.** Complete the normal Windows prompts for the signed sensor driver and read-only helper. Wait for the required readings.
+4. **Drop in a video and choose an output folder.** Start at **depth 1.5 + neural gap filling**. Choose Original FPS, or optional **60 FPS smoothing** on the supported NVIDIA route.
+5. **Generate a short preview** and review faces, edges, movement and cuts in your headset before a long conversion. Start with three seconds on CPU.
+6. When satisfied, choose **Convert full video**, then **Open output folder**. In Bigscreen select **SBS, left eye first**, and check the image proportions.
 
-| Area | Implementation |
-|---|---|
-| Desktop and frontend | React, TypeScript, accessible controls, drag/drop, Tauri 2 and Rust commands |
-| AI integration | Pinned iw3/Depth Anything V2 Small, neural gap filling and RIFE 4.25 adapters |
-| Video engineering | Timestamp-driven resampling, scene-cut guards, HDR metadata/SEI, audio verification and NVENC |
-| Reliability | Atomic checkpoints, source fingerprints, stage hashes, recovery and actionable errors |
-| Windows systems | Process identity, job-object cleanup, narrowly elevated CPU sensing and independent supervision |
-| Verification | Frontend/Python tests, Windows fault tests, synthetic fixtures and CI |
+First setup downloads several GB. Allow **15 GiB free**, or **25 GiB for AMD setup and possible CPU fallback**, plus movie workspace/output space. Setup needs internet access; local conversion requires no cloud account. Display drivers remain separate. Setup, launch and recovery never start a movie job automatically.
 
-The original application work is integration and product engineering. **iw3, RIFE and the pretrained model authors provide the underlying research and inference engines.** No new AI model was trained for this project. Development used AI coding assistance; this portfolio documents implemented behavior and measured tests, without claiming novel model research.
+## What you get
 
-See the [pipeline overview](docs/assets/overview.svg) and read the [architecture](docs/ARCHITECTURE.md), [validation](docs/VALIDATION.md) and [third-party notices](THIRD_PARTY_NOTICES.md).
+- **Adjustable stereo depth** and neural filling for newly exposed regions; a faster filling method remains available.
+- **Automatic setup:** hardware/driver detection, private dependencies, startup checks and CPU fallback when acceleration cannot start.
+- **NVIDIA options:** supported HDR10 preservation, Main10 HEVC encoding and RIFE 60 FPS interpolation with scene-cut guards.
+- **Progress, stage estimates and cancellation,** with recovery of completed stages after interruption.
+- **Thermal supervision:** required-sensor checks, cutoffs and owned-process cleanup. Software monitoring cannot guarantee hardware safety.
+- **Export verification:** source integrity, timing, prepared audio, source-eye detail samples and compatibility margins.
 
-## Preview the interface
+This creates stereoscopic depth on a virtual screen. AI synthesizes the second-eye view, missing regions and optional intermediate frames. It does not recover unseen original footage or create a walkable 360° environment.
 
-With Node.js 22 or later:
+## Hardware and formats
 
-```sh
+| Route                      | Capabilities                                                                                       | Verification status                                                                                                          |
+| -------------------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Windows NVIDIA             | SDR or supported HDR10; Original FPS or optional 60 FPS; up to 1920 pixels per eye                 | RTX 4090 tested. RTX 20/30/40/50-series are expected candidates, subject to driver, NVENC Main10, memory and runtime checks. |
+| Windows CPU, Intel/AMD x64 | SDR, Original FPS, software H.264; up to 1280 pixels per eye                                       | Intel CPU tested; AMD CPU testing outstanding. CPU processing can be substantially slower.                                   |
+| Windows 11 Radeon          | Allowlisted experimental ROCm recipe; SDR, Original FPS, software H.264; up to 1280 pixels per eye | Physical Radeon inference and sensor binding unverified. Unsupported configurations use CPU fallback in Automatic.           |
+| Apple Silicon Mac          | Separate 0.7 preview; SDR, Original FPS; CPU by default, opt-in MPS                                | Hosted-runner CPU/MPS checks passed; no physical-headset certification. Ad-hoc signed; not notarized.                        |
+
+Windows targets **Windows 10/11 x64**. The current CUDA runtime starts at Turing/SM 7.5; GTX 10-series and older use CPU fallback. There is no packaged Windows ARM, Intel Mac or Linux release. A startup probe does not establish maximum-resolution memory requirements or whole-movie reliability. See the [exact hardware recipe](https://github.com/fernandohmachado8/CineVerse-Desktop/blob/v0.8.1-auto-setup-preview/docs/AUTOMATIC_HARDWARE_SETUP.md) and [separate Mac download](https://github.com/fernandohmachado8/CineVerse-Desktop/releases/tag/v0.7.0-macos-preview).
+
+## How it compares
+
+| App                                                                        | Main role                                               | Where it fits                                                                                                                 |
+| -------------------------------------------------------------------------- | ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| **CineVerse Desktop**                                                      | Local desktop workflow around iw3                       | An open-source preview with inspectable setup, supervised jobs, verification reports and supported NVIDIA HDR/60 FPS options. |
+| [iw3 / nunif](https://github.com/nagadomi/nunif/blob/master/iw3/README.md) | Open-source stereo converter with GUI and CLI           | CineVerse's stereo engine. Use it directly for its wider choice of models, parameters and formats.                            |
+| [Owl3D](https://www.owl3d.com/)                                            | Commercial desktop converter and separate cloud service | A ready-made product with multiple stereo formats and free/paid plans. Features depend on platform, model and plan.           |
+| [Immersity for Web](https://www.leiainc.com/faqs)                          | Browser-based depth, motion and 3D conversion           | An upload/export service. Animated depth effects and stereoscopic video are different output choices.                         |
+| [Bigscreen](https://store.steampowered.com/app/457550/Bigscreen_Beta/)     | VR cinema and desktop viewing                           | A playback companion: CineVerse produces the file; Bigscreen provides the viewing environment.                                |
+
+**CineVerse uses iw3's underlying method.** Its contribution is application and systems integration, not a newly trained stereo model. These are workflow comparisons, not measured quality or speed rankings. Read the [sourced comparison](docs/COMPARISON.md), checked on **31 October 2026**. No affiliation with these products is implied.
+
+## Quality and practical limits
+
+- Hair, fences, reflections, occlusions and cuts can produce stretching, softened detail or flicker. Stronger depth can amplify artifacts; preview each kind of material.
+- HDR support is **HDR10 / BT.2020 / PQ** on the supported NVIDIA route. HLG and Dolby Vision preservation are rejected. RIFE is not HDR-trained; synthesized motion can contain artifacts.
+- Input is normalized to its average frame rate, within the supported 1–60 FPS range. Output is not bit-identical to the source video.
+- Export is **full SBS MP4**, with the first audio track converted to AAC stereo. Additional audio tracks and subtitles are omitted. MV-HEVC, half-SBS and top-bottom exports are not implemented.
+- Black compatibility margins add rows without cropping movie pixels. Check codec, aspect-ratio and HDR playback support on your own headset/player.
+- Recovery works **between stages**; an interrupted stage restarts. Long jobs need their own storage, cooling and quality review.
+
+## Verification you can inspect
+
+The **0.8.1 release** passed **147 local tests**: 93 Python, 30 React, 14 Windows watchdog and 10 Rust tests, plus [Windows/source CI](https://github.com/fernandohmachado8/CineVerse-Desktop/actions/runs/41254410161). Actual installer/upgrade and first-launch checks caught and fixed a hardware-detection path issue. [Release evidence](https://github.com/fernandohmachado8/CineVerse-Desktop/releases/download/v0.8.1-auto-setup-preview/VALIDATION.json) records the installed resources and engine checks.
+
+Earlier [0.8.0 evidence](https://github.com/fernandohmachado8/CineVerse-Desktop/releases/download/v0.8.0-auto-setup-preview/VALIDATION.json) separately covers fresh private CPU setup, real AMD-package installation with simulated detection and working CPU fallback, and protected three-frame synthetic conversions. AMD wheels running on Intel CPU are **not Radeon GPU validation**. These fixtures do not certify movie quality, overnight load or speed. Clean-Windows-VM and broader physical hardware testing remain outstanding.
+
+## Engineering and credits
+
+| Area               | Application work                                                                                   |
+| ------------------ | -------------------------------------------------------------------------------------------------- |
+| React + TypeScript | Workflow, native drag/drop, capability-aware controls, preview and progress states                 |
+| Tauri 2 + Rust     | Native commands, private-runtime bootstrap, checked assets and process ownership                   |
+| Python + PyTorch   | iw3/RIFE adapters, hardware profiles, staged processing and structured progress events             |
+| Video pipeline     | HDR10 metadata, timestamp-driven interpolation, audio checks and verified SBS publication          |
+| Reliability        | Atomic checkpoints, source fingerprints, cancellation, sensor-loss handling and owned-tree cleanup |
+
+Stereo inference comes from **[iw3/nunif](https://github.com/nagadomi/nunif)** and **[Depth Anything V2 Small](https://huggingface.co/depth-anything/Depth-Anything-V2-Small)**; interpolation comes from **[Practical-RIFE](https://github.com/hzwer/Practical-RIFE)**. No new AI model was trained. Development used AI coding assistance; this portfolio demonstrates integration, product engineering and measured verification. Read the [released architecture](https://github.com/fernandohmachado8/CineVerse-Desktop/blob/v0.8.1-auto-setup-preview/docs/ARCHITECTURE.md) for details.
+
+## Build the published preview
+
+The default branch preserves the earlier working code while preview changes are reviewed. **Use the release tag for source that matches the download.**
+
+```powershell
+git clone https://github.com/fernandohmachado8/CineVerse-Desktop.git
+cd CineVerse-Desktop
+git switch --detach v0.8.1-auto-setup-preview
 npm ci
 npm run dev
 ```
 
-Open the printed localhost URL. This is a **read-only interface preview**; conversion requires the Windows app and configured engine. The [synthetic fixture generator](examples/generate_fixture.py) supplies analytical test geometry, not AI output or film footage.
-
-## Build for Windows
-
-Install Rust MSVC, Visual Studio C++ build tools/Windows SDK and WebView2 using the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/).
+`npm run dev` opens a browser interface preview; native conversion is disabled there. Building the Windows app requires Node.js 22+, Rust MSVC, the Windows C++ tools/SDK and WebView2; see the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/). Python 3.12 is needed for source checks; end users use the app's private engine.
 
 ```powershell
-npm ci
-npm test
 python -m unittest discover -s tests -v
-npm run tauri -- build --bundles nsis
+python -m unittest discover -s thermal -v
+npm test
+npm run format:check
+npm run build
+cargo test --manifest-path src-tauri/Cargo.toml --locked
+npm run tauri -- build --config src-tauri/tauri.auto.conf.json --bundles nsis
 ```
 
-The unsigned installer packages the interface and application adapters. GPU drivers, CUDA Python, FFmpeg and model weights are installed separately. Building this repository does not replace the original working CineVerse installation.
+Building does not provision the AI engine or start conversion. See [contributing](CONTRIBUTING.md) and the [setup guide](https://github.com/fernandohmachado8/CineVerse-Desktop/blob/v0.8.1-auto-setup-preview/docs/AUTOMATIC_HARDWARE_SETUP.md).
 
-## Engine dependencies
+## Feedback and license
 
-Included: **npm/Cargo lockfiles, the tested Python environment snapshot, pinned upstream commits, model/download URLs and SHA-256 hashes**, plus a setup helper. Dependencies keep their upstream licenses and are fetched into a separate directory instead of being committed as binaries.
+[Report a reproducible problem](https://github.com/fernandohmachado8/CineVerse-Desktop/issues/new?template=bug_report.yml) with the app version, OS, CPU/GPU, driver and processing mode. Use generated media where possible. Do not upload movies, model weights, credentials or unredacted private logs. See [security guidance](SECURITY.md) for sensitive reports.
 
-Install Windows x64 Python **3.12**, Git and a compatible NVIDIA driver. Review [dependency setup](docs/DEPENDENCIES.md) and [licenses](THIRD_PARTY_NOTICES.md). Planning downloads nothing:
-
-```powershell
-py -3.12 scripts/setup_engine.py --root "D:/CineVerse" --download-models
-```
-
-Execute the reviewed plan:
-
-```powershell
-py -3.12 scripts/setup_engine.py --root "D:/CineVerse" --install --download-models
-```
-
-Then choose **Locate engine folder** in the app. CPU sensing requires the official signed PawnIO driver separately and administrator approval for the read-only helper. Setup never installs drivers, changes Windows security or starts conversion. If Google Drive cannot serve RIFE, provide its verified official ZIP with `--rife-archive`.
-
-**Clean-machine installation has not yet been certified.** Planning, safeguards, existing-engine checks and the working PC's runtime were tested separately; see [validation](docs/VALIDATION.md).
-
-## Measured validation
-
-- The standalone app has **71 passing local tests**: 43 Python worker/setup/protection/distribution tests, 14 React tests and 14 Windows legacy watchdog tests.
-- Worker-CLI and **native button-driven three-second HDR/60 FPS previews** completed on an RTX 4090: 181 verified frames, preserved HDR10/prepared audio, zero timestamp-grid error and compatibility margins.
-- The native run had 20 valid monitoring samples: CPU **73–86 °C**, GPU core **39.88–60.36 °C**. These short observations do not establish overnight or whole-film thermal reliability.
-- Fault tests terminate disposable process trees, preserve unrelated processes and check cleanup after monitor failure. Hardware was not deliberately overheated.
-
-Tests require no copyrighted media. Native GPU evidence was measured locally; no film clips, frames, filenames or model weights are published. CI checks source, UI and hardware-independent behavior; it does not run GPU inference.
-
-## Limits
-
-Windows/NVIDIA is the experimental target. HDR10 is supported; HLG and Dolby Vision preservation are rejected. Output is scaled to at most 1920 pixels per eye, uses the first audio track as AAC stereo and omits subtitles. RIFE is not HDR-trained; neural filling can soften or invent detail. Depth comfort varies with material and viewer. Software thermal safeguards cannot guarantee hardware safety and do not measure GPU VRAM/hotspot temperature.
-
-Read the [user guide](docs/USER_GUIDE.md) before a long conversion. Setup, launch and recovery never auto-start a job.
-
-## License
-
-Original application code: **MIT**, copyright Fernando Machado. See [LICENSE](LICENSE).
-
-Engines, pretrained models, codecs and drivers retain separate licenses. No movie, book or training-data rights are supplied. Process authorized media and retain dependency notices when distributing a binary. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Original application code is **MIT**, copyright Fernando Machado. Engines, models, codecs and drivers retain their own licenses; read the [0.8.1 third-party notices](https://github.com/fernandohmachado8/CineVerse-Desktop/blob/v0.8.1-auto-setup-preview/THIRD_PARTY_NOTICES.md). No movie footage, book content or pretrained weights are included. Use media you are authorized to process; the application license does not grant media rights.

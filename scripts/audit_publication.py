@@ -20,7 +20,7 @@ def audit():
     for name in filter(None,names):
         file=ROOT/name;data=subprocess.check_output(['git','show',':'+name],cwd=ROOT);total+=len(data);count+=1
         if file.name in PRIVATE:issues.append({'path':name,'reason':'private settings'})
-        if file.suffix in ('.gif','.png'):
+        if file.suffix in ('.gif','.png','.jpg','.jpeg'):
             record=provenance.get(file.name)
             if name!='docs/assets/'+file.name or not record or hashlib.sha256(data).hexdigest()!=record['sha256']:
                 issues.append({'path':name,'reason':'unregistered binary asset'})

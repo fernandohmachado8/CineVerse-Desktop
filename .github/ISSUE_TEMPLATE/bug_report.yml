@@ -1,0 +1,47 @@
+name: Bug report
+description: Report a reproducible setup, conversion or playback problem.
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use the newest public preview and a short generated/authorized sample where possible.
+        Do not upload movies, model weights, credentials, engine/settings files or unredacted private logs. For sensitive issues, follow SECURITY.md.
+  - type: input
+    id: version
+    attributes:
+      label: CineVerse version
+      placeholder: "0.8.1 — Windows installer"
+    validations:
+      required: true
+  - type: textarea
+    id: hardware
+    attributes:
+      label: System and processing route
+      description: OS version/build, CPU, GPU, graphics driver and Automatic/CPU/CUDA/ROCm/MPS. Model names only; omit serial numbers and private paths.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps, expected result and actual result
+      description: Include whether the problem happens during setup, preview, full conversion, recovery or playback. Omit the source filename.
+    validations:
+      required: true
+  - type: textarea
+    id: media
+    attributes:
+      label: Media and settings, if applicable
+      description: Container/codec, dimensions, frame rate, SDR/HDR type, depth strength, gap filling and FPS mode. For VR, include the player and stereo mode.
+  - type: textarea
+    id: error
+    attributes:
+      label: Exact error or sanitized diagnostic excerpt
+      description: Remove usernames, paths, media titles, tokens and personal information. Mention missing sensors or a thermal stop if relevant.
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Before submitting
+      options:
+        - label: I removed private paths and credentials; any shared sample is authorized for redistribution.
+          required: true
