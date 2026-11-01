@@ -25,7 +25,7 @@
       "license": "application MIT plus attributed UI dependencies"
     },
     "demo-poster-0.8.1.jpg": {
-      "sha256": "04dd2523a66f1e6537218854d1fdf92047e540d96d6cd63e89ff054f332fd22e",
+      "sha256": "b5be4f479a4b44eab6542b0c33a25b551051e49bf4d553167baf6946b307b374",
       "source": "examples/demo/render_walkthrough.py; actual native app captures and original 2D sample",
       "content": "Product walkthrough poster with original analytical artwork and play badge; no movie footage, account data or private paths",
       "license": "MIT artwork and application; attributed UI dependencies"

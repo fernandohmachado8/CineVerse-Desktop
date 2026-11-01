@@ -95,7 +95,7 @@ def main():
             pill(im,(72,217),'2D VIDEO  →  SBS 3D')
             text(im,(72,312),'Bring depth\nto movie night.',66,INK,True)
             text(im,(72,522),'Your local video.\nA new view in your VR cinema.',30,MUTED)
-            pill(im,(72,693),'REAL APP  /  REAL AI EXPORT')
+            pill(im,(72,693),'WORKING APP  /  ACTUAL 3D RESULT')
             text(im,(72,780),'Captioned quick start\nWindows 0.8.1 public preview',25,MUTED)
         elif i==1:
             left(im,'01  /  SET UP','Automatic setup.\nFewer steps.',
