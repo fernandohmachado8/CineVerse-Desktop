@@ -24,3 +24,15 @@ python examples/demo/render_walkthrough.py --captures ./captures --source ./demo
 ```
 
 The renderer expects the 10-second, 240-frame samples, uses Windows Segoe UI fonts, preserves sample playback timing on its 30 FPS presentation timeline, and refuses to overwrite an existing demo. It creates an MP4, optional SRT and poster. The published SRT summarizes each chapter; the presentation's visible instructional text is already in the picture. There is no narration or music. Full app screenshots remain private; public release assets include the reviewed edited video and original/SBS samples, not raw settings or logs.
+
+## Developer edition
+
+`render_developer_demo.py` creates the separate **2:58 technical walkthrough**, with architecture/pipeline diagrams, recorded request fields, supervision and recovery explanations, actual sample playback and measured verification. Its diagrams are explanatory graphics, not simulated app screenshots or invented model outputs. The original 1:26 quick start remains available.
+
+Use the published original/SBS samples and download `DEVELOPER-DEMO-EVIDENCE.json` from the 0.8.1 release. It contains the sanitized recorded request, completed-stage hashes and verification fields. The renderer checks the sample byte hashes against it before rendering. It never starts inference. Use your own matching app captures as described above; only `08-setup-private.jpg` and `03-ready.jpg` are required for this edition. Review the setup crop so private paths remain excluded. Windows Segoe UI and Consolas fonts are expected; `--font-dir` can select another folder with these filenames.
+
+```powershell
+python examples/demo/render_developer_demo.py --captures ./captures --source ./CineVerse-Sample-2D.mp4 --sbs ./CineVerse-Sample-SBS-Depth-1.5.mp4 --evidence ./DEVELOPER-DEMO-EVIDENCE.json --output-dir ./developer-presentation --ffmpeg ffmpeg
+```
+
+Outputs include the 1080p/30 FPS MP4, poster, SRT, chapter-review images and a rendering validation record. Text boxes are checked for overflow. Review images are local QA outputs; only the reviewed presentation, poster, description, sanitized evidence, provenance and checksums are release assets. No private settings or full application captures are published. See [technical notes](../../docs/DEVELOPER_DEMO.md) and [description with chapters](../../docs/DEVELOPER_DEMO_DESCRIPTION.md).
