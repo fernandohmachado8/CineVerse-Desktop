@@ -81,7 +81,8 @@ def main():
         text(im,(72,267),title,57,INK,True)
         text(im,(72,490),body,28,MUTED)
     shots={
-        'source':capture('01-source.jpg',(0,32,1205,890)),
+        # Fresh real source screen; title bar and parked pointer are outside it.
+        'source':capture('01-source-clean.jpg',(0,110,1205,890)),
         'setup':capture('08-setup-private.jpg',(330,91,866,641)),
         'controls':capture('02-controls.jpg',(48,158,380,547)),
         # Use an untouched recorded panel with the pointer outside this crop.
