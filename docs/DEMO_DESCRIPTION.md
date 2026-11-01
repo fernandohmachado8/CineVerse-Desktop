@@ -20,15 +20,17 @@ Powered by iw3 / nunif, Depth Anything V2 and optional Practical-RIFE. CineVerse
 
 ## Chapters
 
-00:00 CineVerse Desktop  
-00:06 Install the engine  
-00:16 Choose a video  
-00:25 Depth and motion  
-00:35 Protection and preview  
-00:44 Original 2D source  
-00:54 Actual AI SBS output  
-01:06 Open the export  
+```text
+00:00 CineVerse Desktop
+00:06 Install the engine
+00:16 Choose a video
+00:25 Depth and motion
+00:35 Protection and preview
+00:44 Original 2D source
+00:54 Actual AI SBS output
+01:06 Open the export
 01:15 Watch in VR
+```
 
 # Optional portfolio post
 
