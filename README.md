@@ -17,9 +17,15 @@ A desktop application that turns local videos into full side-by-side stereo for 
 
 *Actual interface in browser-preview mode. Native processing is disabled; no movie or private settings are shown.*
 
-## Import and audio preview (0.9.0, unreleased)
+## Subtitle preview (0.10.0, unreleased)
 
-This branch adds an explicit **Use HDR10 base** option for verified compatible Dolby Vision Profile 8 sources, plus an **Audio track** selector for previews and full exports. The original file stays untouched. HDR10 output does not preserve Dolby Vision metadata; incompatible Dolby Vision profiles remain blocked. The selected audio is exported as AAC stereo, and subtitles remain omitted.
+This branch adds subtitle-language selection for embedded text tracks, external SRT/ASS files, and an explicit **Burn into both eyes** option. Subtitles start off for every newly loaded source. Selected text is drawn after stereo generation, with the same bottom-centred placement in each eye. Burned text becomes permanent video pixels; it cannot be switched off in the player. Complex ASS layout, karaoke and attached fonts are simplified in this first preview.
+
+The app has a separate identity so the working 0.9 and 0.8.1 releases stay available. See [subtitle use, formats, timing and HDR behavior](docs/SUBTITLES.md). A full-video job still requires an explicit action.
+
+## Import and audio preview (0.9.0)
+
+Version 0.9 introduced an explicit **Use HDR10 base** option for verified compatible Dolby Vision Profile 8 sources, plus an **Audio track** selector for previews and full exports. The original file stays untouched. HDR10 output does not preserve Dolby Vision metadata; incompatible Dolby Vision profiles remain blocked. The selected audio is exported as AAC stereo. Subtitle rendering is added in the separate 0.10 preview.
 
 The preview has a separate application identity, so it can be tested alongside the working 0.8.1 release. It uses the same automatic engine setup and per-conversion temperature supervision. No conversion starts during import or setup. See [import behavior, build commands and validation limits](docs/IMPORT_AND_AUDIO.md).
 
@@ -124,7 +130,7 @@ Tests require no copyrighted media. Native GPU evidence was measured locally; no
 
 ## Limits
 
-The Windows/NVIDIA profile supports HDR10, including an explicitly selected HDR10 base from verified compatible Dolby Vision Profile 8 sources. Dolby Vision metadata is not preserved; incompatible Dolby Vision, HLG and unidentified HDR remain blocked. Output is scaled to at most 1920 pixels per eye; CPU/Mac profiles use at most 1280. The chosen audio track is exported as AAC stereo; additional tracks and subtitles are omitted. Mac currently supports SDR/original FPS only. RIFE is not HDR-trained; neural filling can soften or invent detail. Depth comfort varies with material and viewer. Software thermal safeguards cannot guarantee hardware safety. Windows does not measure GPU VRAM/hotspot temperature; Mac uses a system thermal state rather than Celsius sensors.
+The Windows/NVIDIA profile supports HDR10, including an explicitly selected HDR10 base from verified compatible Dolby Vision Profile 8 sources. Dolby Vision metadata is not preserved; incompatible Dolby Vision, HLG and unidentified HDR remain blocked. Output is scaled to at most 1920 pixels per eye; CPU/Mac profiles use at most 1280. The chosen audio track is exported as AAC stereo. Text subtitles can optionally be burned into both eyes; selectable output subtitle tracks, bitmap OCR and additional audio tracks are not implemented. Mac currently supports SDR/original FPS only. RIFE is not HDR-trained; neural filling can soften or invent detail. Depth comfort varies with material and viewer. Software thermal safeguards cannot guarantee hardware safety. Windows does not measure GPU VRAM/hotspot temperature; Mac uses a system thermal state rather than Celsius sensors.
 
 Read the [user guide](docs/USER_GUIDE.md) before a long conversion. Setup, launch and recovery never auto-start a job.
 

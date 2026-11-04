@@ -202,6 +202,406 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 describe("Desktop conversion flow", () => {
+  const subtitleTracks = [
+    {
+      index: 7,
+      language: "eng",
+      title: "Full dialogue",
+      codec: "subrip",
+      default: true,
+      forced: false,
+      supported: true,
+    },
+    {
+      index: 12,
+      language: "por",
+      title: "Português",
+      codec: "ass",
+      default: false,
+      forced: false,
+      supported: true,
+    },
+    {
+      index: 16,
+      language: "eng",
+      title: "Bitmap signs",
+      codec: "hdmv_pgs_subtitle",
+      default: false,
+      forced: true,
+      supported: false,
+    },
+  ];
+  async function setupSubtitles(
+    tracks = subtitleTracks,
+    saved: Record<string, unknown>[] = [],
+  ) {
+    await setup(
+      false,
+      true,
+      false,
+      true,
+      "cuda",
+      0,
+      undefined,
+      "windows",
+      true,
+      true,
+      { subtitleTracks: tracks },
+      saved,
+    );
+  }
+  it("keeps subtitles off unless burning is explicitly selected", async () => {
+    await setupSubtitles();
+    expect(screen.getByText("Off").getAttribute("aria-pressed")).toBe("true");
+    expect(screen.queryByLabelText("Subtitle language / track")).toBeNull();
+    fireEvent.click(screen.getByText("Generate preview"));
+    await waitFor(() =>
+      expect(mock.invoke).toHaveBeenCalledWith(
+        "start_job",
+        expect.objectContaining({
+          request: expect.objectContaining({
+            subtitleMode: "off",
+            subtitleSource: "embedded",
+            subtitleTrackIndex: null,
+            subtitlePath: null,
+            preview: true,
+          }),
+        }),
+      ),
+    );
+  });
+  it("sends a selected embedded subtitle language by absolute index for previews and full jobs", async () => {
+    await setupSubtitles();
+    fireEvent.click(screen.getByText("Burn into both eyes"));
+    expect(
+      screen.getByLabelText("Subtitle language / track").textContent,
+    ).toContain("English");
+    expect(
+      screen.getByLabelText("Subtitle language / track").textContent,
+    ).toContain("Portuguese");
+    expect(screen.getByText(/permanently rendered/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Subtitle language / track"), {
+      target: { value: "12" },
+    });
+    await screen.findByLabelText("Full movie estimate");
+    expect(mock.invoke).toHaveBeenCalledWith(
+      "plan_conversion",
+      expect.objectContaining({
+        request: expect.objectContaining({
+          subtitleMode: "burn",
+          subtitleSource: "embedded",
+          subtitleTrackIndex: 12,
+        }),
+      }),
+    );
+    fireEvent.click(screen.getByText("Generate preview"));
+    await waitFor(() =>
+      expect(mock.invoke).toHaveBeenCalledWith(
+        "start_job",
+        expect.objectContaining({
+          request: expect.objectContaining({
+            subtitleMode: "burn",
+            subtitleSource: "embedded",
+            subtitleTrackIndex: 12,
+            subtitlePath: null,
+            preview: true,
+          }),
+        }),
+      ),
+    );
+    expect(
+      (screen.getByLabelText("Subtitle language / track") as HTMLSelectElement)
+        .disabled,
+    ).toBe(true);
+    await act(async () => mock.handler({ payload: { type: "cancelled" } }));
+    await screen.findByLabelText("Full movie estimate");
+    fireEvent.click(screen.getByText("Convert full video"));
+    await waitFor(() =>
+      expect(mock.invoke).toHaveBeenCalledWith(
+        "start_job",
+        expect.objectContaining({
+          request: expect.objectContaining({
+            subtitleTrackIndex: 12,
+            subtitleMode: "burn",
+            preview: false,
+          }),
+        }),
+      ),
+    );
+  });
+  it("accepts an external ASS file through the picker and blocks invalid external formats", async () => {
+    await setupSubtitles();
+    fireEvent.click(screen.getByText("Burn into both eyes"));
+    fireEvent.change(screen.getByLabelText("Subtitle source"), {
+      target: { value: "external" },
+    });
+    expect(
+      (screen.getByText("Generate preview") as HTMLButtonElement).disabled,
+    ).toBe(true);
+    fireEvent.change(screen.getByLabelText("External subtitle file"), {
+      target: { value: "/subtitles/captions.exe" },
+    });
+    expect(
+      (screen.getByText("Generate preview") as HTMLButtonElement).disabled,
+    ).toBe(true);
+    mock.open.mockResolvedValueOnce("/subtitles/Português.ass");
+    fireEvent.click(screen.getByText("Browse subtitles"));
+    await waitFor(() =>
+      expect(
+        (screen.getByLabelText("External subtitle file") as HTMLInputElement)
+          .value,
+      ).toBe("/subtitles/Português.ass"),
+    );
+    await screen.findByLabelText("Full movie estimate");
+    expect(mock.open).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filters: [{ name: "Text subtitles", extensions: ["srt", "ass"] }],
+      }),
+    );
+    fireEvent.click(screen.getByText("Generate preview"));
+    await waitFor(() =>
+      expect(mock.invoke).toHaveBeenCalledWith(
+        "start_job",
+        expect.objectContaining({
+          request: expect.objectContaining({
+            subtitleMode: "burn",
+            subtitleSource: "external",
+            subtitleTrackIndex: null,
+            subtitlePath: "/subtitles/Português.ass",
+          }),
+        }),
+      ),
+    );
+  });
+  it("blocks bitmap-only subtitles without claiming OCR and allows captions to be turned off", async () => {
+    await setupSubtitles([subtitleTracks[2]]);
+    fireEvent.click(screen.getByText("Burn into both eyes"));
+    expect(
+      (
+        screen.getByRole("option", {
+          name: /Bitmap signs/,
+        }) as HTMLOptionElement
+      ).disabled,
+    ).toBe(true);
+    expect(screen.getByText(/Bitmap subtitles require OCR/)).toBeTruthy();
+    expect(
+      (screen.getByText("Generate preview") as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(screen.queryByLabelText("Full movie estimate")).toBeNull();
+    fireEvent.click(screen.getByText("Off"));
+    await screen.findByLabelText("Full movie estimate");
+    expect(
+      (screen.getByText("Generate preview") as HTMLButtonElement).disabled,
+    ).toBe(false);
+  });
+  it("resets subtitle burn consent and external paths when the video changes", async () => {
+    await setupSubtitles();
+    fireEvent.click(screen.getByText("Burn into both eyes"));
+    fireEvent.change(screen.getByLabelText("Subtitle source"), {
+      target: { value: "external" },
+    });
+    fireEvent.change(screen.getByLabelText("External subtitle file"), {
+      target: { value: "/subtitles/first.srt" },
+    });
+    await act(async () =>
+      mock.drop({ payload: { type: "drop", paths: ["/test/another.mp4"] } }),
+    );
+    await screen.findByText("another.mp4");
+    expect(screen.getByText("Off").getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(screen.getByText("Burn into both eyes"));
+    expect(
+      (screen.getByLabelText("Subtitle source") as HTMLSelectElement).value,
+    ).toBe("embedded");
+    expect(
+      (screen.getByLabelText("Subtitle language / track") as HTMLSelectElement)
+        .value,
+    ).toBe("7");
+    fireEvent.change(screen.getByLabelText("Subtitle source"), {
+      target: { value: "external" },
+    });
+    expect(
+      (screen.getByLabelText("External subtitle file") as HTMLInputElement)
+        .value,
+    ).toBe("");
+  });
+  it("ignores an external subtitle picker result after a different video is loaded", async () => {
+    await setupSubtitles();
+    const picker = deferred<string>();
+    mock.open.mockReturnValueOnce(picker.promise);
+    fireEvent.click(screen.getByText("Burn into both eyes"));
+    fireEvent.change(screen.getByLabelText("Subtitle source"), {
+      target: { value: "external" },
+    });
+    fireEvent.click(screen.getByText("Browse subtitles"));
+    await act(async () =>
+      mock.drop({ payload: { type: "drop", paths: ["/test/new.mp4"] } }),
+    );
+    await screen.findByText("new.mp4");
+    await act(async () => picker.resolve("/subtitles/old.srt"));
+    expect(screen.getByText("Off").getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(screen.getByText("Burn into both eyes"));
+    fireEvent.change(screen.getByLabelText("Subtitle source"), {
+      target: { value: "external" },
+    });
+    expect(
+      (screen.getByLabelText("External subtitle file") as HTMLInputElement)
+        .value,
+    ).toBe("");
+  });
+  it.each(["cancel", "error"] as const)(
+    "releases a stale subtitle picker when a pending resume ends by %s",
+    async (outcome) => {
+      const savedRequest = {
+        source: "/test/resumable.mp4",
+        outputDir: "/exports",
+        fpsMode: "original",
+        preview: true,
+      };
+      await setupSubtitles(subtitleTracks, [
+        {
+          path: "/exports/.cineverse-jobs/resumable/job.json",
+          source: savedRequest.source,
+          request: savedRequest,
+          completedStages: [],
+          running: false,
+          status: "interrupted",
+          log: "/exports/resumable.log",
+        },
+      ]);
+      const picker = deferred<string>();
+      const resumeProbe = deferred<Record<string, unknown>>();
+      const previous = mock.invoke.getMockImplementation()!;
+      mock.invoke.mockImplementation(async (name: string, args: any) => {
+        if (name === "probe_media" && args.path === savedRequest.source)
+          return resumeProbe.promise;
+        return previous(name, args);
+      });
+      mock.open.mockReturnValueOnce(picker.promise);
+      fireEvent.click(screen.getByText("Burn into both eyes"));
+      fireEvent.change(screen.getByLabelText("Subtitle source"), {
+        target: { value: "external" },
+      });
+      fireEvent.change(screen.getByLabelText("External subtitle file"), {
+        target: { value: "/subtitles/current.srt" },
+      });
+      fireEvent.click(screen.getByText("Browse subtitles"));
+      expect((screen.getByText("Off") as HTMLButtonElement).disabled).toBe(
+        true,
+      );
+      fireEvent.click(await screen.findByLabelText("Resume resumable.mp4"));
+      if (outcome === "cancel") {
+        fireEvent.click(await screen.findByText("Cancel conversion"));
+        await act(async () =>
+          resumeProbe.resolve({
+            path: savedRequest.source,
+            width: 1920,
+            height: 1080,
+            fps: 24,
+            duration: 180,
+            hdr: false,
+            hasAudio: true,
+            subtitleTracks,
+          }),
+        );
+      } else {
+        await act(async () =>
+          resumeProbe.reject(new Error("Resume probe failed")),
+        );
+        expect(await screen.findByText(/Resume probe failed/)).toBeTruthy();
+      }
+      await act(async () => picker.resolve("/subtitles/stale.srt"));
+      expect((screen.getByText("Off") as HTMLButtonElement).disabled).toBe(
+        false,
+      );
+      expect(
+        (screen.getByLabelText("External subtitle file") as HTMLInputElement)
+          .value,
+      ).toBe("/subtitles/current.srt");
+      await screen.findByLabelText("Full movie estimate");
+      expect(
+        (screen.getByText("Generate preview") as HTMLButtonElement).disabled,
+      ).toBe(false);
+      expect(
+        mock.invoke.mock.calls.some(
+          ([name]) => name === "start_job" || name === "cancel_job",
+        ),
+      ).toBe(false);
+    },
+  );
+  it("restores exact saved subtitle settings when resuming", async () => {
+    const savedRequest = {
+      source: "/test/captioned.mp4",
+      outputDir: "/exports",
+      strength: 1.5,
+      stereoMethod: "forward_inpaint",
+      fpsMode: "original",
+      preview: true,
+      previewSeconds: 3,
+      subtitleMode: "burn",
+      subtitleSource: "embedded",
+      subtitleTrackIndex: 12,
+      subtitlePath: null,
+    };
+    await setupSubtitles(subtitleTracks, [
+      {
+        path: "/exports/.cineverse-jobs/captions/job.json",
+        source: savedRequest.source,
+        request: savedRequest,
+        completedStages: ["Creating stereo depth"],
+        running: false,
+        status: "interrupted",
+        log: "/exports/captions.log",
+      },
+    ]);
+    fireEvent.click(await screen.findByLabelText("Resume captioned.mp4"));
+    await waitFor(() =>
+      expect(mock.invoke).toHaveBeenCalledWith(
+        "start_job",
+        expect.objectContaining({
+          request: {
+            ...savedRequest,
+            resumeJob: "/exports/.cineverse-jobs/captions/job.json",
+          },
+        }),
+      ),
+    );
+    expect(
+      screen.getByText("Burn into both eyes").getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(
+      (screen.getByLabelText("Subtitle language / track") as HTMLSelectElement)
+        .value,
+    ).toBe("12");
+  });
+  it("refuses a saved subtitle stream that is missing or unsupported", async () => {
+    const savedRequest = {
+      source: "/test/captioned.mp4",
+      outputDir: "/exports",
+      fpsMode: "original",
+      preview: true,
+      subtitleMode: "burn",
+      subtitleSource: "embedded",
+      subtitleTrackIndex: 16,
+    };
+    await setupSubtitles(subtitleTracks, [
+      {
+        path: "/exports/.cineverse-jobs/captions/job.json",
+        source: savedRequest.source,
+        request: savedRequest,
+        completedStages: [],
+        running: false,
+        status: "interrupted",
+        log: "/exports/captions.log",
+      },
+    ]);
+    fireEvent.click(await screen.findByLabelText("Resume captioned.mp4"));
+    expect(
+      await screen.findByText(/saved subtitle track is no longer available/),
+    ).toBeTruthy();
+    expect(mock.invoke.mock.calls.some(([name]) => name === "start_job")).toBe(
+      false,
+    );
+  });
   const audioTracks = [
     {
       index: 1,

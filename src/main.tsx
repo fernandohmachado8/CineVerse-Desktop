@@ -52,6 +52,17 @@ type AudioTrack = {
   default: boolean;
 };
 type SourceMode = "original" | "hdr10-base";
+type SubtitleMode = "off" | "burn";
+type SubtitleSource = "embedded" | "external";
+type SubtitleTrack = {
+  index: number;
+  language: string;
+  title: string;
+  codec: string;
+  default: boolean;
+  forced: boolean;
+  supported: boolean;
+};
 type Media = {
   path: string;
   width: number;
@@ -64,6 +75,7 @@ type Media = {
   dolbyVisionProfile?: number | null;
   hdr10BaseCompatible?: boolean;
   audioTracks?: AudioTrack[];
+  subtitleTracks?: SubtitleTrack[];
 };
 type Plan = {
   spaceBudgetBytes: number;
@@ -75,6 +87,9 @@ type Plan = {
   outputEstimateBytesHigh: number;
   sourceMode?: SourceMode;
   selectedAudio?: AudioTrack | null;
+  subtitleMode?: SubtitleMode;
+  selectedSubtitle?:
+    SubtitleTrack | { source: "external"; path: string } | null;
 };
 type SavedJob = {
   path: string;
@@ -199,6 +214,10 @@ const audioLabel = (track: AudioTrack) => {
     .filter(Boolean)
     .join(" · ");
 };
+const subtitleLabel = (track: SubtitleTrack) =>
+  audioLabel({ ...track, channels: 0 }) +
+  (track.forced ? " · forced" : "") +
+  (track.supported ? "" : " · unsupported bitmap/format");
 
 export function App() {
   const [settings, setSettings] = useState<Settings>(empty),
@@ -227,6 +246,14 @@ export function App() {
     [probing, setProbing] = useState(false);
   const [sourceMode, setSourceMode] = useState<SourceMode>("original");
   const [audioTrackIndex, setAudioTrackIndex] = useState<number | null>(null);
+  const [subtitleMode, setSubtitleMode] = useState<SubtitleMode>("off");
+  const [subtitleSource, setSubtitleSource] =
+    useState<SubtitleSource>("embedded");
+  const [subtitleTrackIndex, setSubtitleTrackIndex] = useState<number | null>(
+    null,
+  );
+  const [subtitlePath, setSubtitlePath] = useState("");
+  const [subtitlePicking, setSubtitlePicking] = useState(false);
   const [strength, setStrength] = useState(1.5),
     [stereoMethod, setStereoMethod] = useState<StereoMethod>("forward_inpaint"),
     [fpsMode, setFpsMode] = useState("60");
@@ -262,6 +289,26 @@ export function App() {
   const selectedAudio = media?.audioTracks?.find(
     (track) => track.index === audioTrackIndex,
   );
+  const selectedSubtitle = media?.subtitleTracks?.find(
+    (track) => track.index === subtitleTrackIndex && track.supported,
+  );
+  const subtitleBlocked =
+    subtitleMode === "burn" &&
+    (subtitleSource === "embedded"
+      ? !selectedSubtitle
+      : !/\.(srt|ass)$/i.test(subtitlePath.trim()));
+  const subtitleRequest = () => ({
+    subtitleMode,
+    subtitleSource: subtitleMode === "burn" ? subtitleSource : "embedded",
+    subtitleTrackIndex:
+      subtitleMode === "burn" && subtitleSource === "embedded"
+        ? subtitleTrackIndex
+        : null,
+    subtitlePath:
+      subtitleMode === "burn" && subtitleSource === "external"
+        ? subtitlePath.trim()
+        : null,
+  });
   const setFailure = (e: unknown) => setError(String(e));
   async function check(s: Settings) {
     setChecking(true);
@@ -291,6 +338,11 @@ export function App() {
     setMedia(null);
     setSourceMode("original");
     setAudioTrackIndex(null);
+    setSubtitleMode("off");
+    setSubtitleSource("embedded");
+    setSubtitleTrackIndex(null);
+    setSubtitlePath("");
+    setSubtitlePicking(false);
     setPlan(null);
     setStart(0);
     try {
@@ -301,6 +353,9 @@ export function App() {
       if (generation !== mediaGeneration.current) return;
       setMedia(probed);
       setAudioTrackIndex(probed.audioTracks?.[0]?.index ?? null);
+      setSubtitleTrackIndex(
+        probed.subtitleTracks?.find((track) => track.supported)?.index ?? null,
+      );
       if (s.lastVideo !== p) {
         // Serialize last-video writes. A write already in flight may finish
         // after another import starts; the latest import must persist last.
@@ -317,6 +372,28 @@ export function App() {
       if (generation === mediaGeneration.current) setFailure(e);
     } finally {
       if (generation === mediaGeneration.current) setProbing(false);
+    }
+  }
+  async function browseSubtitle() {
+    if (!media || busy || subtitlePicking) return;
+    const generation = mediaGeneration.current;
+    setSubtitlePicking(true);
+    try {
+      const file = await open({
+        title: "Choose SRT or ASS subtitles",
+        multiple: false,
+        filters: [{ name: "Text subtitles", extensions: ["srt", "ass"] }],
+      });
+      if (generation !== mediaGeneration.current) return;
+      if (typeof file === "string") {
+        setSubtitlePath(file);
+        setPlan(null);
+        setError("");
+      }
+    } catch (e) {
+      if (generation === mediaGeneration.current) setFailure(e);
+    } finally {
+      if (generation === mediaGeneration.current) setSubtitlePicking(false);
     }
   }
   useEffect(() => {
@@ -488,7 +565,9 @@ export function App() {
       !settings.outputDir ||
       busy ||
       !engine?.ready ||
-      importBlocked
+      importBlocked ||
+      subtitleBlocked ||
+      subtitlePicking
     )
       return;
     let current = true;
@@ -503,6 +582,7 @@ export function App() {
           fpsMode,
           sourceMode,
           audioTrackIndex,
+          ...subtitleRequest(),
           preview: false,
         },
       })
@@ -525,6 +605,12 @@ export function App() {
     fpsMode,
     sourceMode,
     audioTrackIndex,
+    subtitleMode,
+    subtitleSource,
+    subtitleTrackIndex,
+    subtitlePath,
+    subtitleBlocked,
+    subtitlePicking,
     importBlocked,
     engine?.backend,
     engine?.ready,
@@ -767,6 +853,7 @@ export function App() {
           fpsMode,
           sourceMode,
           audioTrackIndex,
+          ...subtitleRequest(),
           preview,
           previewStart: start,
           previewSeconds: length,
@@ -783,6 +870,9 @@ export function App() {
     const generation = ++mediaGeneration.current;
     pendingResumeGeneration.current = generation;
     setProbing(false);
+    // Resume invalidates any open subtitle picker. Its stale finally callback
+    // must not be responsible for releasing the current controls.
+    setSubtitlePicking(false);
     setError("");
     setBusy(true);
     setCancelling(false);
@@ -819,6 +909,26 @@ export function App() {
           "The saved audio track is no longer available in this source.",
         );
       }
+      if (
+        job.request.subtitleMode === "burn" &&
+        job.request.subtitleSource !== "external" &&
+        !probed.subtitleTracks?.some(
+          (track) =>
+            track.supported && track.index === job.request.subtitleTrackIndex,
+        )
+      ) {
+        throw new Error(
+          "The saved subtitle track is no longer available in this source.",
+        );
+      }
+      if (
+        job.request.subtitleMode === "burn" &&
+        job.request.subtitleSource === "external" &&
+        (typeof job.request.subtitlePath !== "string" ||
+          !/\.(srt|ass)$/i.test(job.request.subtitlePath.trim()))
+      ) {
+        throw new Error("The saved external subtitle file must be SRT or ASS.");
+      }
       setMedia(probed);
       setPath(source);
       setSourceMode(
@@ -829,6 +939,22 @@ export function App() {
           ? job.request.audioTrackIndex
           : (probed.audioTracks?.[0]?.index ?? null),
       );
+      setSubtitleMode(job.request.subtitleMode === "burn" ? "burn" : "off");
+      setSubtitleSource(
+        job.request.subtitleSource === "external" ? "external" : "embedded",
+      );
+      setSubtitleTrackIndex(
+        typeof job.request.subtitleTrackIndex === "number"
+          ? job.request.subtitleTrackIndex
+          : (probed.subtitleTracks?.find((track) => track.supported)?.index ??
+              null),
+      );
+      setSubtitlePath(
+        typeof job.request.subtitlePath === "string"
+          ? job.request.subtitlePath
+          : "",
+      );
+      setSubtitlePicking(false);
       setStrength(Number(job.request.strength ?? 1.5));
       setStereoMethod(
         job.request.stereoMethod === "row_flow_v3"
@@ -862,6 +988,7 @@ export function App() {
     if (pendingResumeGeneration.current !== null) {
       mediaGeneration.current += 1;
       pendingResumeGeneration.current = null;
+      setSubtitlePicking(false);
       setBusy(false);
       setCancelling(false);
       setProgress({
@@ -905,6 +1032,8 @@ export function App() {
     !setupBusy &&
     !probing &&
     !importBlocked &&
+    !subtitleBlocked &&
+    !subtitlePicking &&
     (fpsMode !== "60" || (engine.rifeReady && engine.supports60 !== false)) &&
     (!media.hdr || engine.supportsHDR !== false) &&
     (stereoMethod !== "forward_inpaint" || engine.neuralReady !== false);
@@ -944,7 +1073,7 @@ export function App() {
             <h1>Bring depth to movie night.</h1>
             <p>Turn a 2D video into a stereo film, ready for your headset.</p>
           </div>
-          <span className="version">PREVIEW · 0.9.0</span>
+          <span className="version">PREVIEW · 0.10.0</span>
         </div>
         {!native && (
           <div className="notice">
@@ -1144,18 +1273,156 @@ export function App() {
                       ))}
                     </select>
                     <p className="hint">
-                      The selected track is exported as AAC stereo. Subtitles
-                      are omitted.
+                      The selected audio track is exported as AAC stereo.
                     </p>
                   </>
                 ) : (
                   <p className="hint">
                     {media.hasAudio
-                      ? "The first audio track is exported as AAC stereo. Subtitles are omitted."
+                      ? "The first audio track is exported as AAC stereo."
                       : "This video has no audio track."}
                   </p>
                 )}
               </div>
+            )}
+            {media && (
+              <section
+                className="subtitle-options"
+                aria-label="Subtitle options"
+              >
+                <label className="field-label">Subtitles</label>
+                <div className="segmented" aria-label="Subtitle mode">
+                  <button
+                    aria-pressed={subtitleMode === "off"}
+                    className={subtitleMode === "off" ? "active" : ""}
+                    disabled={busy || subtitlePicking}
+                    onClick={() => {
+                      setSubtitleMode("off");
+                      setPlan(null);
+                      setError("");
+                    }}
+                  >
+                    Off
+                  </button>
+                  <button
+                    aria-pressed={subtitleMode === "burn"}
+                    className={subtitleMode === "burn" ? "active" : ""}
+                    disabled={busy || subtitlePicking}
+                    onClick={() => {
+                      setSubtitleMode("burn");
+                      setPlan(null);
+                      setError("");
+                    }}
+                  >
+                    Burn into both eyes
+                  </button>
+                </div>
+                {subtitleMode === "off" ? (
+                  <p className="hint">
+                    No subtitles are included in the export.
+                  </p>
+                ) : (
+                  <>
+                    <p className="hint" id="subtitle-burn-description">
+                      Subtitles are permanently rendered into each eye after
+                      depth generation, at the screen plane. They cannot be
+                      switched off during playback. This adds an encoding pass.
+                    </p>
+                    <label className="field-label" htmlFor="subtitle-source">
+                      Subtitle source
+                    </label>
+                    <select
+                      id="subtitle-source"
+                      aria-label="Subtitle source"
+                      aria-describedby="subtitle-burn-description"
+                      value={subtitleSource}
+                      disabled={busy || subtitlePicking}
+                      onChange={(event) => {
+                        setSubtitleSource(event.target.value as SubtitleSource);
+                        setPlan(null);
+                        setError("");
+                      }}
+                    >
+                      <option value="embedded">Embedded track</option>
+                      <option value="external">External SRT / ASS file</option>
+                    </select>
+                    {subtitleSource === "embedded" ? (
+                      <>
+                        <label className="field-label" htmlFor="subtitle-track">
+                          Subtitle language / track
+                        </label>
+                        <select
+                          id="subtitle-track"
+                          aria-label="Subtitle language / track"
+                          value={subtitleTrackIndex ?? ""}
+                          disabled={busy}
+                          onChange={(event) => {
+                            setSubtitleTrackIndex(
+                              event.target.value === ""
+                                ? null
+                                : Number(event.target.value),
+                            );
+                            setPlan(null);
+                            setError("");
+                          }}
+                        >
+                          <option value="" disabled>
+                            Select a text subtitle track
+                          </option>
+                          {(media.subtitleTracks || []).map((track) => (
+                            <option
+                              key={track.index}
+                              value={track.index}
+                              disabled={!track.supported}
+                            >
+                              {subtitleLabel(track)}
+                            </option>
+                          ))}
+                        </select>
+                        {!selectedSubtitle && (
+                          <p className="warning">
+                            Choose a supported text track or an external SRT /
+                            ASS file. Bitmap subtitles require OCR and are not
+                            supported.
+                          </p>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <label className="field-label" htmlFor="subtitle-path">
+                          External subtitle file
+                        </label>
+                        <div className="subtitle-file">
+                          <input
+                            id="subtitle-path"
+                            aria-label="External subtitle file"
+                            placeholder="Path to an SRT or ASS file"
+                            value={subtitlePath}
+                            disabled={busy || subtitlePicking}
+                            onChange={(event) => {
+                              setSubtitlePath(event.target.value);
+                              setPlan(null);
+                              setError("");
+                            }}
+                          />
+                          <button
+                            disabled={busy || subtitlePicking || !native}
+                            onClick={() => void browseSubtitle()}
+                          >
+                            {subtitlePicking ? "Choosing…" : "Browse subtitles"}
+                          </button>
+                        </div>
+                        {subtitleBlocked && (
+                          <p className="warning">
+                            Choose an SRT or ASS subtitle file to enable
+                            conversion.
+                          </p>
+                        )}
+                      </>
+                    )}
+                  </>
+                )}
+              </section>
             )}
             <div className="section-heading">
               <span className="step">02</span>
@@ -1267,8 +1534,11 @@ export function App() {
             <p className="hint">
               Up to {engine?.maxWidth || 1920} pixels per eye.{" "}
               {media?.hasAudio
-                ? `${selectedAudio ? audioLabel(selectedAudio) : "First audio track"} → AAC stereo; subtitles omitted.`
-                : "No audio selected; subtitles omitted."}
+                ? `${selectedAudio ? audioLabel(selectedAudio) : "First audio track"} → AAC stereo.`
+                : "No audio selected."}{" "}
+              {subtitleMode === "off"
+                ? "Subtitles off."
+                : `Subtitles burned into both eyes: ${subtitleSource === "external" ? basename(subtitlePath) || "choose a file" : selectedSubtitle ? subtitleLabel(selectedSubtitle) : "choose a text track"}.`}
             </p>
             <p className="safety">
               <ShieldCheck size={15} /> Your original file stays untouched.
@@ -1661,8 +1931,8 @@ export function App() {
             <h2>Recover an interrupted conversion</h2>
             <p className="hint">
               Completed stages are reused with their saved depth and gap
-              filling, HDR mode and audio selection. The interrupted stage
-              restarts.
+              filling, HDR mode, audio and subtitle selection. The interrupted
+              stage restarts.
             </p>
             {savedJobs.map((job) => (
               <div key={job.path} className="recovery-row">
@@ -1678,6 +1948,11 @@ export function App() {
                   {typeof job.request.audioTrackIndex === "number"
                     ? ` · audio stream ${job.request.audioTrackIndex}`
                     : " · first audio track"}
+                  {job.request.subtitleMode === "burn"
+                    ? job.request.subtitleSource === "external"
+                      ? ` · burned subtitles: ${basename(String(job.request.subtitlePath || "external file"))}`
+                      : ` · burned subtitle stream ${String(job.request.subtitleTrackIndex)}`
+                    : " · subtitles off"}
                 </span>
                 <button
                   disabled={job.running || !engine || !protectionReady}

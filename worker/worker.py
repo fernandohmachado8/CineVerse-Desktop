@@ -13,6 +13,7 @@ import traceback
 import uuid
 from fractions import Fraction
 from media_import import source_details, source_mode, selected_audio
+from subtitles import selection as subtitle_selection, inventory as subtitle_inventory
 
 FLAGS = getattr(subprocess, 'CREATE_NO_WINDOW', 0)
 DEFAULT_STRENGTH = 1.5
@@ -36,7 +37,7 @@ def probe(config, path):
     if not path.is_file():
         raise ValueError('Video file not found. Choose an existing local video.')
     p = subprocess.run([config['ffprobe'], '-v', 'error', '-show_streams', '-show_format', '-of', 'json', str(path)],
-                       capture_output=True, text=True, creationflags=FLAGS, timeout=45)
+                       capture_output=True, text=True, encoding='utf-8', errors='replace', creationflags=FLAGS, timeout=45)
     if p.returncode:
         raise ValueError('Could not read this video. ' + p.stderr[-1500:])
     info = json.loads(p.stdout)
@@ -53,6 +54,7 @@ def probe(config, path):
             'transfer':video.get('color_transfer'), 'primaries':video.get('color_primaries'),
             'pixelFormat':video.get('pix_fmt',''), 'frames':int(video.get('nb_frames',0) or 0),
             **source_details(video, info['streams']),
+            'subtitleTracks':subtitle_inventory(info['streams']),
             'sar': video.get('sample_aspect_ratio', '1:1'),
             'hasAudio': any(s['codec_type'] == 'audio' for s in info['streams']),
             'bytes': path.stat().st_size}
@@ -80,6 +82,7 @@ def validate(request, media):
     stereo_method(request)
     source_mode(request, media)
     selected_audio(request, media)
+    subtitle_selection(request, media)
     strength = float(request.get('strength', 3 if request.get('resumeJob') else DEFAULT_STRENGTH))
     if not math.isfinite(strength) or not 0 <= strength <= 5:
         raise ValueError('Depth strength must be between 0 and 5.')

@@ -944,3 +944,33 @@ footer i {
   font-size: 11px;
   overflow-wrap: anywhere;
 }
+
+.subtitle-options {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.subtitle-options .segmented button {
+  font-size: 11px;
+}
+.subtitle-options select {
+  width: 100%;
+}
+.subtitle-file {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.subtitle-file input {
+  width: 100%;
+  min-width: 0;
+  padding: 10px;
+  background: #1c2425;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.subtitle-file button {
+  padding: 9px 12px;
+  font-size: 11px;
+}

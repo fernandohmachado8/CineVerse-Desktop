@@ -14,12 +14,14 @@ import uuid
 from worker import emit,probe,check,validate,process,timeline,audio_hash,FLAGS,stereo_method
 from hardware import planned_backend, validate_profile
 from media_import import source_mode, selected_audio, audio_map, hdr10_copy_command, require_dovi_filter, verify_hdr10_copy
+import subtitles
 
-VERSION='0.9-import-audio-v1'
+VERSION='0.10-stereo-subtitles-v1'
+IMPORT_VERSION='0.9-import-audio-v1'
 PORTABLE_VERSION='0.5-portable-v1'
 NEURAL_VERSION='0.3-neural-default-v1'
 LEGACY_VERSION='0.2-hdr60-edge-v1'
-SUPPORTED_VERSIONS=(VERSION,PORTABLE_VERSION,NEURAL_VERSION,LEGACY_VERSION)
+SUPPORTED_VERSIONS=(VERSION,IMPORT_VERSION,PORTABLE_VERSION,NEURAL_VERSION,LEGACY_VERSION)
 GIB=1024**3
 
 
@@ -64,6 +66,8 @@ def plan(config,request):
     budget=max(GIB,int(seconds*(6 if backend in ('cpu','mps','rocm') else 24 if smooth else 16)*1024**2))
     import_mode=source_mode(request,media)
     if import_mode=='hdr10-base':budget+=media['bytes']
+    caption=subtitles.selection(request,media)
+    if caption:budget+=max(GIB,int(seconds*4*1024**2))
     directory=Path(request.get('outputDir') or config.get('outputDir') or '.')
     parent=directory
     while not parent.exists() and parent!=parent.parent:parent=parent.parent
@@ -74,6 +78,7 @@ def plan(config,request):
     return {'media':media,'strength':strength,'start':start,'seconds':seconds,'hdr':media['hdr'],
         'smooth':smooth,'stereoMethod':method,'targetFPS':60 if request.get('fpsMode')=='60' else media['fps'],
         'sourceMode':import_mode,'selectedAudio':selected_audio(request,media),
+        'subtitleMode':request.get('subtitleMode','off'),'selectedSubtitle':caption,
         'spaceBudgetBytes':budget,'freeBytes':free,'enoughSpace':free>=budget,
         'backend':backend,'maxWidth':1280 if backend in ('cpu','mps','rocm') else 1920,
         'estimatedSecondsLow':None if backend in ('cpu','mps','rocm') else seconds*factor[0],'estimatedSecondsHigh':None if backend in ('cpu','mps','rocm') else seconds*factor[1],
@@ -126,6 +131,7 @@ def canonical_request(request,version=VERSION):
     result.setdefault('processingBackend','cuda')
     result.setdefault('sourceMode','original')
     result.setdefault('audioTrackIndex',None)
+    result.update(subtitles.canonical(request))
     return result
 
 
@@ -144,7 +150,7 @@ def run(config,request):
     if request.get('resumeJob'):
         state_path=resume_path(directory,request['resumeJob']);state=json.loads(state_path.read_text());work=state_path.parent
         if state.get('pipeline') not in SUPPORTED_VERSIONS or canonical_request(state['request'],state['pipeline'])!=clean_request:
-            raise ValueError('Saved settings or processing backend differ. Resume with the saved source mode, audio track, backend, depth and gap-filling method, or start a new preview.')
+            raise ValueError('Saved settings or processing backend differ. Resume with the saved source mode, audio/subtitle choice, backend, depth and gap-filling method, or start a new preview.')
         if state.get('status')=='complete':raise ValueError('This job is already complete.')
     else:
         if not p['enoughSpace']:raise ValueError(f"Allow {p['spaceBudgetBytes']/GIB:.0f} GB of free temporary space on the output drive.")
@@ -164,6 +170,11 @@ def run(config,request):
         current=identity(source,not request.get('preview'))
         if state.get('sourceIdentity') and state['sourceIdentity']!=current:raise ValueError('The source movie changed. Start a new job.')
         state['sourceIdentity']=current;state['status']='running';state.pop('error',None);save()
+        selected_subtitle=p['selectedSubtitle']
+        subtitle_identity=subtitles.external_identity(selected_subtitle)
+        if state.get('subtitleIdentity')!=subtitle_identity and ('subtitleIdentity' in state or request.get('resumeJob') and subtitle_identity is not None):
+            raise ValueError('The external subtitle file changed. Start a new job instead of reusing saved stages.')
+        state['subtitleIdentity']=subtitle_identity;save()
         completed=state['completed'];reused=[];invalidated=False
         def stage(name,outputs,partials,action):
             nonlocal invalidated
@@ -223,6 +234,14 @@ def run(config,request):
         if hdr:
             from hdr_trial import hdr_params
             if hdr_params(prepared,config['ffprobe'])!=hdr_params(source,config['ffprobe'],stream_index=media.get('videoStreamIndex')):raise ValueError('Preparation did not retain HDR10 metadata.')
+        subtitle_report={'mode':'off','burnedIntoBothEyes':False,'selectedSubtitle':None}
+        if selected_subtitle:
+            def prepare_subtitles():
+                proof=subtitles.prepare(config,source,selected_subtitle,work,p['start'],p['seconds'],media,prepared_meta,process)
+                atomic_json(work/'captions.json',proof)
+            # Reject malformed captions before scene analysis/interpolation/stereo.
+            stage('Preparing subtitles',['captions.ass','captions.json'],['subtitle_source.ass'],prepare_subtitles)
+            subtitle_report=json.loads((work/'captions.json').read_text())
         env=dict(os.environ,NUNIF_HOME=config['cache'],HF_HOME=str(Path(config['cache'])/'huggingface'),TORCH_HOME=str(Path(config['cache'])/'torch'),PYTHONNOUSERSITE='1',PYTHONUNBUFFERED='1')
         if backend in ('cpu','mps','rocm'):env.update(OMP_NUM_THREADS='2',MKL_NUM_THREADS='2',VECLIB_MAXIMUM_THREADS='2',CINEVERSE_PROCESSING_BACKEND=backend)
         if backend in ('cpu','mps'):env['CUDA_VISIBLE_DEVICES']=''
@@ -258,13 +277,23 @@ def run(config,request):
                 '--max-fps',str(ref_meta['fps']),'--ema-decay',str(decay)]
         stage('Creating stereo depth',['stereo.mp4'],['_tmp_stereo.mp4','_error_stereo.mp4'],
             lambda:process(export,'Creating stereo depth · '+('neural gap filling' if method=='forward_inpaint' else 'fast gap filling'),log,env,config['iw3Repo']))
-        tagged=work/'stereo_hdr.mp4' if hdr else raw
+        captioned=raw
+        if selected_subtitle:
+            if subtitle_report['cueCount']:
+                captioned=work/'captioned.mp4'
+                raw_start=probe(config,raw)['videoStart']
+                command=subtitles.burn_command(config,raw,captioned,backend,hdr,raw_start)
+                stage('Burning subtitles into both eyes',['captioned.mp4'],[],
+                    lambda:process(command,'Burning subtitles into both eyes',log,env,work,duration=p['seconds']))
+            else:
+                emit('progress',stage='Preparing subtitles',percent=100,eta=0,message='No subtitle cues fall inside this preview window; the video has no burned captions.')
+        tagged=work/'stereo_hdr.mp4' if hdr else captioned
         final=work/'verified.mp4'
         def finalize():
             if hdr:
                 from hdr_sei import add_static_hdr
-                add_static_hdr(raw,reference,tagged)
-            shift=ref_meta['videoStart']-probe(config,raw)['videoStart']
+                add_static_hdr(captioned,reference,tagged)
+            shift=ref_meta['videoStart']-probe(config,captioned)['videoStart']
             process([ffmpeg,'-v','error','-nostdin','-n','-itsoffset',str(shift),'-i',str(tagged),'-i',str(reference),
                 '-map','0:v:0','-map','1:a:0?','-c','copy','-copyts','-avoid_negative_ts','disabled',
                 *(['-tag:v','hvc1'] if hdr else []),'-movflags','+faststart',str(final)],'Restoring audio and HDR metadata',log)
@@ -282,20 +311,28 @@ def run(config,request):
             # Check crop-free coded geometry using FFprobe, plus sampled margins/content below.
             info=json.loads(subprocess.check_output([config['ffprobe'],'-v','error','-select_streams','v:0','-show_streams','-of','json',str(final)],creationflags=FLAGS))['streams'][0]
             if info['coded_height']!=height or info['height']!=height:raise RuntimeError('Hidden bottom crop was not eliminated')
-            quality=verify_edges(reference,final,height,hdr)
+            quality=verify_edges(reference,raw if selected_subtitle else final,height,hdr)
+            if selected_subtitle:
+                quality['detailComparedAgainst']='stereo before intentional subtitle overlay'
+                quality['subtitlesIntentionallyModifyPixels']=bool(subtitle_report.get('cueCount'))
+                quality['postBurnPictureChecks']=subtitles.verify_picture(raw,final,hdr)
+                subtitle_report['outputGeometryAndTimelineVerified']=True
+                subtitle_report['captionedPixelsPerceptuallyVerified']=False
+                if subtitles.external_identity(selected_subtitle)!=subtitle_identity:raise RuntimeError('External subtitle integrity check changed')
             if source.stat().st_size!=source_stat.st_size or identity(source,not request.get('preview'))!=current:raise RuntimeError('Source integrity check changed')
             atomic_json(work/'verification.json',{'reference':a,'outputTimeline':b,'preparedAudioPreserved':True,'quality':quality,
                 'HDR':hdr,'sourceIntegrity':current,'sourceCheckPassed':True,'stereoMetadata':output_meta,
-                'sourceImport':import_report,'selectedAudio':selected})
+                'sourceImport':import_report,'selectedAudio':selected,'subtitles':subtitle_report})
         stage('Verifying output',['verification.json'],[],verify)
         verified=json.loads((work/'verification.json').read_text())
         safe=''.join(c if c.isalnum() or c in ' .-_' else '_' for c in source.stem)[:65]
         mode='preview' if request.get('preview') else 'full'
-        name=f"{safe}_CineVerse_{mode}_d{p['strength']:g}_{'neural' if method=='forward_inpaint' else 'fast'}_{'60fps' if request['fpsMode']=='60' else 'original-fps'}_{'HDR10' if hdr else 'SDR'}_{work.name}_LRF_Full_SBS.mp4"
+        caption_label=('_subtitles-burned' if subtitle_report.get('cueCount') else '_subtitles-no-cues') if selected_subtitle else ''
+        name=f"{safe}_CineVerse_{mode}_d{p['strength']:g}_{'neural' if method=='forward_inpaint' else 'fast'}_{'60fps' if request['fpsMode']=='60' else 'original-fps'}_{'HDR10' if hdr else 'SDR'}{caption_label}_{work.name}_LRF_Full_SBS.mp4"
         destination=directory/name
         report={**verified,'source':str(source),'output':str(destination),'outputSha256':hash_file(final,'Checking final export'),
             'request':clean_request,'gpu':capabilities['gpu'],'backend':backend,'pipeline':state['pipeline'],'checkpointedStages':completed,'reusedStages':reused,
-            'log':str(log),'limitations':['The selected audio track is AAC stereo; subtitles/additional tracks omitted.',
+            'log':str(log),'limitations':['The selected audio track is AAC stereo; additional audio and switchable subtitle streams are omitted.',
                 'Explicit black compatibility margins retain all image pixels.','Interrupted stages restart; completed verified stages can be resumed.']}
         if smooth:report['limitations'].append('60 FPS motion is AI-generated with cut guards; artifacts remain possible.')
         if backend in ('cpu','mps','rocm'):
@@ -304,13 +341,16 @@ def run(config,request):
         if backend=='rocm':report['limitations'].append('Experimental AMD ROCm inference, not validated on physical AMD hardware. Software decode/encode; no AMF, NVENC, HDR or RIFE.')
         if method=='forward_inpaint':report['limitations'].append('Neural gap filling invents disoccluded texture and may soften or flicker. It is not recovered footage.')
         if p['sourceMode']=='hdr10-base':report['limitations'].append('HDR10-compatible base used. Dolby Vision metadata was removed from a temporary copy; Dolby Vision is not preserved.')
+        if selected_subtitle:
+            report['limitations'].append('ASS positioning, fonts, colors and effects are normalized. Original image-detail checks use the stereo frame before intentional subtitle overlay; sampled upper-picture and margin checks run after burn-in. Final caption placement/comfort requires visual review.')
+            report['limitations'].append('Selected text captions are baked identically into both eyes after stereo generation and cannot be switched off; burn-in uses an additional video encode.' if subtitle_report.get('cueCount') else 'No selected subtitle cues overlap this preview window. No captions were burned into the picture.')
         if destination.exists():
             if hash_file(destination)!=report['outputSha256']:raise FileExistsError('A different export exists at the destination')
         else:os.link(final,destination)
         atomic_json(destination.with_suffix('.json'),report)
         state['status']='complete';state['output']=str(destination);save()
         # Publication succeeded: remove only known large intermediates in this job directory.
-        for rel in ('hdr10_base.mp4','prepared.mp4','smooth60.mp4','stereo.mp4','stereo_hdr.mp4','verified.mp4'):
+        for rel in ('hdr10_base.mp4','prepared.mp4','smooth60.mp4','stereo.mp4','captioned.mp4','stereo_hdr.mp4','verified.mp4'):
             path=work/rel
             if path.is_file():path.unlink()
         emit('complete',output=str(destination),report=str(destination.with_suffix('.json')),log=str(log),
