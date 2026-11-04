@@ -1,3 +1,5 @@
+> For the current Windows 0.10 download, use the [released user guide](https://github.com/fernandohmachado8/CineVerse-Desktop/blob/v0.10.0-subtitle-preview/docs/USER_GUIDE.md), [subtitle guide](SUBTITLES.md) and [HDR10/audio guide](IMPORT_AND_AUDIO.md). This file retains the earlier baseline documentation.
+
 # CineVerse Desktop 0.4
 
 Windows desktop converter with integrated CPU/GPU temperature supervision and bounded local engine discovery for this configured NVIDIA PC: source HDR10 preservation, preferred depth 1.5 with neural gap filling and optional true 60 FPS interpolation, NVENC export, preview, and recovery of completed stages. Earlier reconstruction experiments remain separate from this standalone desktop repository.
