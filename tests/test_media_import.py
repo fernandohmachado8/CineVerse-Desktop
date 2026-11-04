@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 import sys
 import tempfile
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 import unittest
 from unittest.mock import patch
 from contextlib import ExitStack
@@ -218,7 +218,11 @@ class MediaImportTests(unittest.TestCase):
             stack.enter_context(patch.object(pipeline, 'require_dovi_filter'))
             stack.enter_context(patch.object(pipeline, 'verify_hdr10_copy', return_value={'dolbyVisionPreserved': False}))
             stack.enter_context(patch('hdr_trial.hdr_params', return_value=['hdr10=1']))
-            stack.enter_context(patch('hdr_sei.add_static_hdr', side_effect=lambda raw, ref, dst: Path(dst).write_bytes(Path(raw).read_bytes())))
+            # Stub the codec module itself: patching its function would import
+            # real PyAV before replacing it in the stdlib-only CI environment.
+            hdr_stub = ModuleType('hdr_sei')
+            hdr_stub.add_static_hdr = lambda raw, ref, dst: Path(dst).write_bytes(Path(raw).read_bytes())
+            stack.enter_context(patch.dict(sys.modules, {'hdr_sei': hdr_stub}))
             stack.enter_context(patch.object(pipeline, 'timeline', side_effect=[
                 {'width': 100, 'height': 50, 'frames': 3, 'first': 0, 'last': 2/24, 'maxGridError': 0, 'rate': '24'},
                 {'width': 200, 'height': 128, 'frames': 3, 'first': 0, 'last': 2/24, 'maxGridError': 0, 'rate': '24'}]))
