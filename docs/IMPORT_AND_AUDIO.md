@@ -1,6 +1,6 @@
 # HDR10 base import and audio selection
 
-This unreleased Windows 0.9.0 preview extends the working 0.8.1 code in a separate application. The 0.8.1 executable, installer and local settings remain usable. Existing CPU/GPU protection, bounded previews, source integrity checks and verified stage recovery remain required.
+These import/audio controls were introduced in the local Windows 0.9.0 preview and are included in the published 0.10 subtitle preview. Earlier executables, installers and local settings remain usable. Existing CPU/GPU protection, bounded previews, source integrity checks and verified stage recovery remain required. See [subtitle selection and burn-in](SUBTITLES.md) for the 0.10 additions.
 
 ## Import a compatible Dolby Vision source
 
@@ -23,7 +23,7 @@ The audio dropdown lists each source audio track with its language, title, codec
 
 The request stores the absolute source stream index rather than a displayed list position. Selection is checked against a fresh source probe before processing. When HDR10-base remuxing changes stream indices, the selected source track is mapped to its correct audio position in the temporary copy. The selected track is downmixed/re-encoded as AAC stereo during normal preparation; the finalization step retains that prepared audio and verifies its packet hash.
 
-Subtitles, additional audio tracks and surround/Atmos preservation are outside this preview. The original retains those tracks. The output report identifies the selected source audio and the HDR10-base choice, so an English dub cannot be mistaken for a Japanese track merely because both were present in the input.
+Additional audio tracks and surround/Atmos preservation are outside this preview. The original retains those tracks. Version 0.10 additionally supports [optional text subtitle burn-in](SUBTITLES.md); selectable output subtitle streams remain omitted. The output report identifies the selected source audio and the HDR10-base choice, so an English dub cannot be mistaken for a Japanese track merely because both were present in the input.
 
 ## Recovery and verification
 

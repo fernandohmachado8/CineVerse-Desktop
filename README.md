@@ -17,11 +17,13 @@ A desktop application that turns local videos into full side-by-side stereo for 
 
 *Actual interface in browser-preview mode. Native processing is disabled; no movie or private settings are shown.*
 
-## Subtitle preview (0.10.0, unreleased)
+## Subtitle preview (0.10.0)
 
 This branch adds subtitle-language selection for embedded text tracks, external SRT/ASS files, and an explicit **Burn into both eyes** option. Subtitles start off for every newly loaded source. Selected text is drawn after stereo generation, with the same bottom-centred placement in each eye. Burned text becomes permanent video pixels; it cannot be switched off in the player. Complex ASS layout, karaoke and attached fonts are simplified in this first preview.
 
 The app has a separate identity so the working 0.9 and 0.8.1 releases stay available. See [subtitle use, formats, timing and HDR behavior](docs/SUBTITLES.md). A full-video job still requires an explicit action.
+
+[Download the Windows subtitle preview](https://github.com/fernandohmachado8/CineVerse-Desktop/releases/tag/v0.10.0-subtitle-preview). The installer is unsigned. Older downloads and the separate Mac preview remain available.
 
 ## Import and audio preview (0.9.0)
 
