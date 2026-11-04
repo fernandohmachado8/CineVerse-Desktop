@@ -9,8 +9,8 @@ def digest(path):
     with open(path,'rb') as f:return hashlib.file_digest(f,'sha256').hexdigest()
 
 
-def hdr_params(path,ffprobe):
-    data=json.loads(subprocess.check_output([str(ffprobe),'-v','error','-select_streams','v:0',
+def hdr_params(path,ffprobe,stream_index=None):
+    data=json.loads(subprocess.check_output([str(ffprobe),'-v','error','-select_streams',str(stream_index) if stream_index is not None else 'v:0',
         '-read_intervals','%+#1','-show_frames','-show_streams','-of','json',str(path)],
         creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0)))
     v=data['streams'][0]

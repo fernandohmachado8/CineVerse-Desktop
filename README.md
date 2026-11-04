@@ -17,6 +17,12 @@ A desktop application that turns local videos into full side-by-side stereo for 
 
 *Actual interface in browser-preview mode. Native processing is disabled; no movie or private settings are shown.*
 
+## Import and audio preview (0.9.0, unreleased)
+
+This branch adds an explicit **Use HDR10 base** option for verified compatible Dolby Vision Profile 8 sources, plus an **Audio track** selector for previews and full exports. The original file stays untouched. HDR10 output does not preserve Dolby Vision metadata; incompatible Dolby Vision profiles remain blocked. The selected audio is exported as AAC stereo, and subtitles remain omitted.
+
+The preview has a separate application identity, so it can be tested alongside the working 0.8.1 release. It uses the same automatic engine setup and per-conversion temperature supervision. No conversion starts during import or setup. See [import behavior, build commands and validation limits](docs/IMPORT_AND_AUDIO.md).
+
 ## Automatic setup preview
 
 The current `feature/automatic-hardware-setup` branch adds **CineVerse Automatic Setup Preview 0.8**: read-only CPU/GPU/driver detection, automatic private dependency setup, experimental allowlisted Radeon installation, startup checks and automatic CPU fallback. Normal users do not configure dependency paths. Windows still requires approval for the signed temperature driver/helper. **No physical AMD hardware has been tested.** See [hardware selection, AMD eligibility and verification limits](docs/AUTOMATIC_HARDWARE_SETUP.md).
@@ -118,7 +124,7 @@ Tests require no copyrighted media. Native GPU evidence was measured locally; no
 
 ## Limits
 
-The Windows/NVIDIA profile supports HDR10; HLG and Dolby Vision preservation are rejected. Its output is scaled to at most 1920 pixels per eye; CPU/Mac profiles use at most 1280. Output uses the first audio track as AAC stereo and omits subtitles. Mac currently supports SDR/original FPS only. RIFE is not HDR-trained; neural filling can soften or invent detail. Depth comfort varies with material and viewer. Software thermal safeguards cannot guarantee hardware safety. Windows does not measure GPU VRAM/hotspot temperature; Mac uses a system thermal state rather than Celsius sensors.
+The Windows/NVIDIA profile supports HDR10, including an explicitly selected HDR10 base from verified compatible Dolby Vision Profile 8 sources. Dolby Vision metadata is not preserved; incompatible Dolby Vision, HLG and unidentified HDR remain blocked. Output is scaled to at most 1920 pixels per eye; CPU/Mac profiles use at most 1280. The chosen audio track is exported as AAC stereo; additional tracks and subtitles are omitted. Mac currently supports SDR/original FPS only. RIFE is not HDR-trained; neural filling can soften or invent detail. Depth comfort varies with material and viewer. Software thermal safeguards cannot guarantee hardware safety. Windows does not measure GPU VRAM/hotspot temperature; Mac uses a system thermal state rather than Celsius sensors.
 
 Read the [user guide](docs/USER_GUIDE.md) before a long conversion. Setup, launch and recovery never auto-start a job.
 

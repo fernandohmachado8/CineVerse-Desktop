@@ -52,6 +52,15 @@ const settings = {
   outputDir: "/exports",
   cpuDriverInstaller: "/engine/downloads/PawnIO_setup.exe",
 };
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((done, fail) => {
+    resolve = done;
+    reject = fail;
+  });
+  return { promise, resolve, reject };
+}
 async function setup(
   hdr = false,
   enoughSpace = true,
@@ -63,6 +72,8 @@ async function setup(
   platform = "windows",
   gpuReady = true,
   sensorDriverInstalled = true,
+  mediaOverrides: Record<string, unknown> = {},
+  savedJobs: Record<string, unknown>[] = [],
 ) {
   let driverInstalled = sensorDriverInstalled;
   mock.invoke.mockImplementation(async (name: string, args: any) => {
@@ -139,15 +150,16 @@ async function setup(
       };
     if (name === "probe_media")
       return {
-        path: "/test/video.mp4",
+        path: args.path || "/test/video.mp4",
         width: 1920,
         height: 804,
         fps: 23.976,
         duration: 180,
         hdr,
         hasAudio: true,
+        ...mediaOverrides,
       };
-    if (name === "list_jobs") return [];
+    if (name === "list_jobs") return savedJobs;
     if (name === "plan_conversion") {
       if (backend === "cpu" && args.request.fpsMode !== "original")
         throw Error("CPU startup planned unsupported FPS");
@@ -171,7 +183,8 @@ async function setup(
       mock.drop({ payload: { type: "drop", paths: ["/test/video.mp4"] } }),
     );
   await screen.findByText("video.mp4");
-  await screen.findByLabelText("Full movie estimate", {}, { timeout: 3000 });
+  if (!mediaOverrides.dolbyVision)
+    await screen.findByLabelText("Full movie estimate", {}, { timeout: 3000 });
   await waitFor(() =>
     expect(
       screen.getByLabelText("Temperature protection").textContent,
@@ -189,6 +202,510 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 describe("Desktop conversion flow", () => {
+  const audioTracks = [
+    {
+      index: 1,
+      language: "eng",
+      title: "English dub",
+      codec: "eac3",
+      channels: 6,
+      default: true,
+    },
+    {
+      index: 5,
+      language: "jpn",
+      title: "Original",
+      codec: "eac3",
+      channels: 6,
+      default: false,
+    },
+  ];
+  const compatibleImport = {
+    dolbyVision: true,
+    dolbyVisionProfile: 8,
+    hdr10BaseCompatible: true,
+    audioTracks,
+  };
+  const compatibleMedia = (path: string) => ({
+    path,
+    width: 1920,
+    height: 1080,
+    fps: 24,
+    duration: 180,
+    hdr: true,
+    hasAudio: true,
+    ...compatibleImport,
+  });
+  async function setupCompatibleImport() {
+    await setup(
+      true,
+      true,
+      false,
+      true,
+      "cuda",
+      0,
+      undefined,
+      "windows",
+      true,
+      true,
+      compatibleImport,
+    );
+  }
+
+  it("requires explicit HDR10-base consent and labels Dolby Vision accurately", async () => {
+    await setupCompatibleImport();
+    expect(
+      screen.getByText("Dolby Vision profile 8 detected", { exact: false }),
+    ).toBeTruthy();
+    expect(screen.queryByText(/HDR10 is preserved/)).toBeNull();
+    expect(
+      (screen.getByLabelText("Use HDR10 base") as HTMLInputElement).checked,
+    ).toBe(false);
+    expect(
+      (screen.getByText("Generate preview") as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(
+      mock.invoke.mock.calls.some(
+        ([name]) => name === "plan_conversion" || name === "start_job",
+      ),
+    ).toBe(false);
+    fireEvent.click(screen.getByLabelText("Use HDR10 base"));
+    await screen.findByLabelText("Full movie estimate");
+    expect(
+      (screen.getByText("Generate preview") as HTMLButtonElement).disabled,
+    ).toBe(false);
+    expect(screen.getByText(/removes Dolby Vision metadata/)).toBeTruthy();
+    expect(mock.invoke).toHaveBeenCalledWith(
+      "plan_conversion",
+      expect.objectContaining({
+        request: expect.objectContaining({
+          sourceMode: "hdr10-base",
+          audioTrackIndex: 1,
+        }),
+      }),
+    );
+    fireEvent.click(screen.getByLabelText("Use HDR10 base"));
+    expect(
+      (screen.getByText("Generate preview") as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(screen.queryByLabelText("Full movie estimate")).toBeNull();
+  });
+
+  it("sends the selected Japanese absolute stream index in preview and full jobs", async () => {
+    await setupCompatibleImport();
+    fireEvent.click(screen.getByLabelText("Use HDR10 base"));
+    fireEvent.change(screen.getByLabelText("Audio track"), {
+      target: { value: "5" },
+    });
+    await screen.findByLabelText("Full movie estimate");
+    expect(
+      (screen.getByLabelText("Audio track") as HTMLSelectElement).value,
+    ).toBe("5");
+    expect(screen.getByLabelText("Audio track").textContent).toContain(
+      "Japanese",
+    );
+    fireEvent.click(screen.getByText("Generate preview"));
+    await waitFor(() =>
+      expect(mock.invoke).toHaveBeenCalledWith(
+        "start_job",
+        expect.objectContaining({
+          request: expect.objectContaining({
+            sourceMode: "hdr10-base",
+            audioTrackIndex: 5,
+            preview: true,
+          }),
+        }),
+      ),
+    );
+    expect(
+      (screen.getByLabelText("Audio track") as HTMLSelectElement).disabled,
+    ).toBe(true);
+    expect(
+      (screen.getByLabelText("Use HDR10 base") as HTMLInputElement).disabled,
+    ).toBe(true);
+    await act(async () => mock.handler({ payload: { type: "cancelled" } }));
+    await screen.findByLabelText("Full movie estimate");
+    fireEvent.click(screen.getByText("Convert full video"));
+    await waitFor(() =>
+      expect(mock.invoke).toHaveBeenCalledWith(
+        "start_job",
+        expect.objectContaining({
+          request: expect.objectContaining({
+            sourceMode: "hdr10-base",
+            audioTrackIndex: 5,
+            preview: false,
+          }),
+        }),
+      ),
+    );
+  });
+
+  it("resets HDR consent and audio selection when another source is loaded", async () => {
+    await setupCompatibleImport();
+    fireEvent.click(screen.getByLabelText("Use HDR10 base"));
+    fireEvent.change(screen.getByLabelText("Audio track"), {
+      target: { value: "5" },
+    });
+    await screen.findByLabelText("Full movie estimate");
+    await act(async () =>
+      mock.drop({ payload: { type: "drop", paths: ["/test/another.mp4"] } }),
+    );
+    await screen.findByText("another.mp4");
+    expect(
+      (screen.getByLabelText("Use HDR10 base") as HTMLInputElement).checked,
+    ).toBe(false);
+    expect(
+      (screen.getByLabelText("Audio track") as HTMLSelectElement).value,
+    ).toBe("1");
+    expect(
+      (screen.getByText("Generate preview") as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(screen.queryByLabelText("Full movie estimate")).toBeNull();
+    expect(mock.invoke.mock.calls.some(([name]) => name === "start_job")).toBe(
+      false,
+    );
+  });
+
+  it("blocks unsupported Dolby Vision profiles without offering HDR10 preparation", async () => {
+    await setup(
+      true,
+      true,
+      false,
+      true,
+      "cuda",
+      0,
+      undefined,
+      "windows",
+      true,
+      true,
+      {
+        ...compatibleImport,
+        dolbyVisionProfile: 5,
+        hdr10BaseCompatible: false,
+      },
+    );
+    expect(screen.getByText(/no verified HDR10-compatible/)).toBeTruthy();
+    expect(screen.queryByLabelText("Use HDR10 base")).toBeNull();
+    expect(screen.queryByText(/HDR10 is preserved/)).toBeNull();
+    expect(
+      (screen.getByText("Generate preview") as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(
+      (screen.getByText("Convert full video") as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(
+      mock.invoke.mock.calls.some(
+        ([name]) => name === "plan_conversion" || name === "start_job",
+      ),
+    ).toBe(false);
+  });
+
+  it("ignores an older probe resolving after a newer source and its HDR consent", async () => {
+    await setupCompatibleImport();
+    const first = deferred<ReturnType<typeof compatibleMedia>>();
+    const second = deferred<ReturnType<typeof compatibleMedia>>();
+    const previous = mock.invoke.getMockImplementation()!;
+    mock.invoke.mockImplementation(async (name: string, args: any) => {
+      if (name === "probe_media" && args.path === "/test/first.mp4")
+        return first.promise;
+      if (name === "probe_media" && args.path === "/test/second.mp4")
+        return second.promise;
+      return previous(name, args);
+    });
+    await act(async () =>
+      mock.drop({ payload: { type: "drop", paths: ["/test/first.mp4"] } }),
+    );
+    await act(async () =>
+      mock.drop({ payload: { type: "drop", paths: ["/test/second.mp4"] } }),
+    );
+    await act(async () => second.resolve(compatibleMedia("/test/second.mp4")));
+    await screen.findByText("second.mp4");
+    fireEvent.click(screen.getByLabelText("Use HDR10 base"));
+    fireEvent.change(screen.getByLabelText("Audio track"), {
+      target: { value: "5" },
+    });
+    await screen.findByLabelText("Full movie estimate");
+    await act(async () =>
+      first.resolve({
+        ...compatibleMedia("/test/first.mp4"),
+        audioTracks: [{ ...audioTracks[0], index: 11 }],
+      }),
+    );
+    expect(screen.queryByText("first.mp4")).toBeNull();
+    expect(screen.getByText("second.mp4")).toBeTruthy();
+    expect(
+      (screen.getByLabelText("Video file path") as HTMLInputElement).value,
+    ).toBe("/test/second.mp4");
+    expect(
+      (screen.getByLabelText("Use HDR10 base") as HTMLInputElement).checked,
+    ).toBe(true);
+    expect(
+      (screen.getByLabelText("Audio track") as HTMLSelectElement).value,
+    ).toBe("5");
+    expect(
+      mock.invoke.mock.calls.some(
+        ([name, args]) =>
+          name === "save_settings" &&
+          args.settings.lastVideo === "/test/first.mp4",
+      ),
+    ).toBe(false);
+    fireEvent.click(screen.getByText("Generate preview"));
+    await waitFor(() =>
+      expect(mock.invoke).toHaveBeenCalledWith(
+        "start_job",
+        expect.objectContaining({
+          request: expect.objectContaining({
+            source: "/test/second.mp4",
+            sourceMode: "hdr10-base",
+            audioTrackIndex: 5,
+          }),
+        }),
+      ),
+    );
+  });
+
+  it("ignores stale probe errors and keeps the latest pending import blocked", async () => {
+    await setupCompatibleImport();
+    const first = deferred<ReturnType<typeof compatibleMedia>>();
+    const second = deferred<ReturnType<typeof compatibleMedia>>();
+    const previous = mock.invoke.getMockImplementation()!;
+    mock.invoke.mockImplementation(async (name: string, args: any) => {
+      if (name === "probe_media" && args.path === "/test/first.mp4")
+        return first.promise;
+      if (name === "probe_media" && args.path === "/test/second.mp4")
+        return second.promise;
+      return previous(name, args);
+    });
+    await act(async () =>
+      mock.drop({ payload: { type: "drop", paths: ["/test/first.mp4"] } }),
+    );
+    await act(async () =>
+      mock.drop({ payload: { type: "drop", paths: ["/test/second.mp4"] } }),
+    );
+    await act(async () => first.reject(new Error("Old probe failed")));
+    expect(screen.queryByText(/Old probe failed/)).toBeNull();
+    expect(screen.getByText("Reading video…")).toBeTruthy();
+    expect(
+      (screen.getByText("Generate preview") as HTMLButtonElement).disabled,
+    ).toBe(true);
+    await act(async () => second.resolve(compatibleMedia("/test/second.mp4")));
+    await screen.findByText("second.mp4");
+    expect(
+      (screen.getByLabelText("Use HDR10 base") as HTMLInputElement).checked,
+    ).toBe(false);
+  });
+
+  it("orders last-video settings writes so an in-flight old save cannot overwrite the latest import", async () => {
+    await setupCompatibleImport();
+    const oldSave = deferred<void>();
+    const newSave = deferred<void>();
+    const writes: string[] = [];
+    const previous = mock.invoke.getMockImplementation()!;
+    mock.invoke.mockImplementation(async (name: string, args: any) => {
+      if (
+        name === "save_settings" &&
+        args.settings.lastVideo === "/test/first.mp4"
+      ) {
+        writes.push(args.settings.lastVideo);
+        return oldSave.promise;
+      }
+      if (
+        name === "save_settings" &&
+        args.settings.lastVideo === "/test/second.mp4"
+      ) {
+        writes.push(args.settings.lastVideo);
+        return newSave.promise;
+      }
+      return previous(name, args);
+    });
+    await act(async () =>
+      mock.drop({ payload: { type: "drop", paths: ["/test/first.mp4"] } }),
+    );
+    await screen.findByText("Reading video…");
+    await waitFor(() => expect(writes).toEqual(["/test/first.mp4"]));
+    await act(async () =>
+      mock.drop({ payload: { type: "drop", paths: ["/test/second.mp4"] } }),
+    );
+    expect(writes).toEqual(["/test/first.mp4"]);
+    await act(async () => oldSave.resolve());
+    await waitFor(() =>
+      expect(writes).toEqual(["/test/first.mp4", "/test/second.mp4"]),
+    );
+    expect(screen.getByText("Reading video…")).toBeTruthy();
+    expect(
+      (screen.getByText("Generate preview") as HTMLButtonElement).disabled,
+    ).toBe(true);
+    await act(async () => newSave.resolve());
+    await screen.findByText("second.mp4");
+    expect(screen.queryByText("first.mp4")).toBeNull();
+  });
+
+  it("keeps legacy files usable and makes no-audio inputs explicit", async () => {
+    await setup(
+      false,
+      true,
+      false,
+      true,
+      "cuda",
+      0,
+      undefined,
+      "windows",
+      true,
+      true,
+      { hasAudio: false, audioTracks: [] },
+    );
+    expect(screen.getByText("This video has no audio track.")).toBeTruthy();
+    expect(screen.queryByLabelText("Audio track")).toBeNull();
+    fireEvent.click(screen.getByText("Generate preview"));
+    await waitFor(() =>
+      expect(mock.invoke).toHaveBeenCalledWith(
+        "start_job",
+        expect.objectContaining({
+          request: expect.objectContaining({
+            sourceMode: "original",
+            audioTrackIndex: null,
+          }),
+        }),
+      ),
+    );
+  });
+
+  it("resumes with the exact saved HDR and audio settings and reflects those controls", async () => {
+    const savedRequest = {
+      source: "/test/saved.mp4",
+      outputDir: "/exports",
+      strength: 1.25,
+      stereoMethod: "forward_inpaint",
+      fpsMode: "original",
+      preview: false,
+      sourceMode: "hdr10-base",
+      audioTrackIndex: 5,
+    };
+    await setup(
+      true,
+      true,
+      false,
+      true,
+      "cuda",
+      0,
+      undefined,
+      "windows",
+      true,
+      true,
+      compatibleImport,
+      [
+        {
+          path: "/exports/.cineverse-jobs/old/job.json",
+          source: savedRequest.source,
+          request: savedRequest,
+          completedStages: ["Preparing HDR10 base"],
+          running: false,
+          status: "interrupted",
+          log: "/exports/job.log",
+        },
+      ],
+    );
+    const oldProbe = deferred<ReturnType<typeof compatibleMedia>>();
+    const previous = mock.invoke.getMockImplementation()!;
+    mock.invoke.mockImplementation(async (name: string, args: any) => {
+      if (name === "probe_media" && args.path === "/test/late.mp4")
+        return oldProbe.promise;
+      return previous(name, args);
+    });
+    await act(async () =>
+      mock.drop({ payload: { type: "drop", paths: ["/test/late.mp4"] } }),
+    );
+    fireEvent.click(await screen.findByLabelText("Resume saved.mp4"));
+    await waitFor(() =>
+      expect(mock.invoke).toHaveBeenCalledWith(
+        "start_job",
+        expect.objectContaining({
+          request: {
+            ...savedRequest,
+            resumeJob: "/exports/.cineverse-jobs/old/job.json",
+          },
+        }),
+      ),
+    );
+    expect(
+      (screen.getByLabelText("Use HDR10 base") as HTMLInputElement).checked,
+    ).toBe(true);
+    expect(
+      (screen.getByLabelText("Audio track") as HTMLSelectElement).value,
+    ).toBe("5");
+    expect(screen.getByText("saved.mp4")).toBeTruthy();
+    expect(screen.getByText("Original FPS").getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    await act(async () => oldProbe.resolve(compatibleMedia("/test/late.mp4")));
+    expect(screen.queryByText("late.mp4")).toBeNull();
+    expect(screen.getByText("saved.mp4")).toBeTruthy();
+    expect(
+      mock.invoke.mock.calls.some(
+        ([name, args]) =>
+          name === "save_settings" &&
+          args.settings.lastVideo === "/test/late.mp4",
+      ),
+    ).toBe(false);
+  });
+
+  it("cancels a pending resume probe without later starting its job", async () => {
+    const savedRequest = {
+      source: "/test/saved.mp4",
+      outputDir: "/exports",
+      strength: 1.5,
+      stereoMethod: "forward_inpaint",
+      fpsMode: "original",
+      preview: false,
+      sourceMode: "hdr10-base",
+      audioTrackIndex: 5,
+    };
+    await setup(
+      true,
+      true,
+      false,
+      true,
+      "cuda",
+      0,
+      undefined,
+      "windows",
+      true,
+      true,
+      compatibleImport,
+      [
+        {
+          path: "/exports/.cineverse-jobs/old/job.json",
+          source: savedRequest.source,
+          request: savedRequest,
+          completedStages: ["Preparing HDR10 base"],
+          running: false,
+          status: "interrupted",
+          log: "/exports/job.log",
+        },
+      ],
+    );
+    const savedProbe = deferred<ReturnType<typeof compatibleMedia>>();
+    const previous = mock.invoke.getMockImplementation()!;
+    mock.invoke.mockImplementation(async (name: string, args: any) => {
+      if (name === "probe_media" && args.path === savedRequest.source)
+        return savedProbe.promise;
+      return previous(name, args);
+    });
+    fireEvent.click(await screen.findByLabelText("Resume saved.mp4"));
+    fireEvent.click(await screen.findByText("Cancel conversion"));
+    expect(await screen.findByText("Conversion cancelled")).toBeTruthy();
+    await act(async () =>
+      savedProbe.resolve(compatibleMedia(savedRequest.source)),
+    );
+    expect(
+      mock.invoke.mock.calls.some(
+        ([name]) => name === "start_job" || name === "cancel_job",
+      ),
+    ).toBe(false);
+    expect(screen.queryByText("saved.mp4")).toBeNull();
+    expect(screen.getByText("video.mp4")).toBeTruthy();
+  });
+
   it("shows detected hardware and keeps setup on automatic without starting conversion", async () => {
     await setup();
     fireEvent.click(screen.getByLabelText("Engine settings"));

@@ -13,10 +13,13 @@ import uuid
 
 from worker import emit,probe,check,validate,process,timeline,audio_hash,FLAGS,stereo_method
 from hardware import planned_backend, validate_profile
+from media_import import source_mode, selected_audio, audio_map, hdr10_copy_command, require_dovi_filter, verify_hdr10_copy
 
-VERSION='0.5-portable-v1'
+VERSION='0.9-import-audio-v1'
+PORTABLE_VERSION='0.5-portable-v1'
 NEURAL_VERSION='0.3-neural-default-v1'
 LEGACY_VERSION='0.2-hdr60-edge-v1'
+SUPPORTED_VERSIONS=(VERSION,PORTABLE_VERSION,NEURAL_VERSION,LEGACY_VERSION)
 GIB=1024**3
 
 
@@ -59,6 +62,8 @@ def plan(config,request):
     validate_profile(backend, request, media)
     smooth=request.get('fpsMode')=='60' and media['fps']<60
     budget=max(GIB,int(seconds*(6 if backend in ('cpu','mps','rocm') else 24 if smooth else 16)*1024**2))
+    import_mode=source_mode(request,media)
+    if import_mode=='hdr10-base':budget+=media['bytes']
     directory=Path(request.get('outputDir') or config.get('outputDir') or '.')
     parent=directory
     while not parent.exists() and parent!=parent.parent:parent=parent.parent
@@ -68,6 +73,7 @@ def plan(config,request):
     factor=((4.2,7.0) if smooth else (1.3,2.7)) if method=='forward_inpaint' else ((2.7,4.0) if smooth else (.6,1.3))
     return {'media':media,'strength':strength,'start':start,'seconds':seconds,'hdr':media['hdr'],
         'smooth':smooth,'stereoMethod':method,'targetFPS':60 if request.get('fpsMode')=='60' else media['fps'],
+        'sourceMode':import_mode,'selectedAudio':selected_audio(request,media),
         'spaceBudgetBytes':budget,'freeBytes':free,'enoughSpace':free>=budget,
         'backend':backend,'maxWidth':1280 if backend in ('cpu','mps','rocm') else 1920,
         'estimatedSecondsLow':None if backend in ('cpu','mps','rocm') else seconds*factor[0],'estimatedSecondsHigh':None if backend in ('cpu','mps','rocm') else seconds*factor[1],
@@ -97,7 +103,7 @@ def jobs(config):
             try:
                 s=json.loads(p.read_text());lock=p.parent/'active.json'
                 running=lock.exists() and alive(json.loads(lock.read_text())['pid'])
-                if s.get('pipeline') in (VERSION,NEURAL_VERSION,LEGACY_VERSION) and s.get('status')!='complete':
+                if s.get('pipeline') in SUPPORTED_VERSIONS and s.get('status')!='complete':
                     saved_request=canonical_request(s['request'],s['pipeline'])
                     result.append({'path':str(p),'source':s['request']['source'],'request':saved_request,
                         'completedStages':list(s.get('completed',{})),'running':running,'updated':p.stat().st_mtime,
@@ -118,6 +124,8 @@ def canonical_request(request,version=VERSION):
     result.setdefault('stereoMethod','row_flow_v3' if version==LEGACY_VERSION else 'forward_inpaint')
     result.setdefault('strength',3 if version==LEGACY_VERSION else 1.5)
     result.setdefault('processingBackend','cuda')
+    result.setdefault('sourceMode','original')
+    result.setdefault('audioTrackIndex',None)
     return result
 
 
@@ -135,8 +143,8 @@ def run(config,request):
     clean_request=canonical_request({**request,'stereoMethod':method,'strength':p['strength'],'processingBackend':backend})
     if request.get('resumeJob'):
         state_path=resume_path(directory,request['resumeJob']);state=json.loads(state_path.read_text());work=state_path.parent
-        if state.get('pipeline') not in (VERSION,NEURAL_VERSION,LEGACY_VERSION) or canonical_request(state['request'],state['pipeline'])!=clean_request:
-            raise ValueError('Saved settings or processing backend differ. Resume with the saved backend, depth and gap-filling method, or start a new preview.')
+        if state.get('pipeline') not in SUPPORTED_VERSIONS or canonical_request(state['request'],state['pipeline'])!=clean_request:
+            raise ValueError('Saved settings or processing backend differ. Resume with the saved source mode, audio track, backend, depth and gap-filling method, or start a new preview.')
         if state.get('status')=='complete':raise ValueError('This job is already complete.')
     else:
         if not p['enoughSpace']:raise ValueError(f"Allow {p['spaceBudgetBytes']/GIB:.0f} GB of free temporary space on the output drive.")
@@ -182,19 +190,39 @@ def run(config,request):
             hashes={rel:hash_file(work/rel,f'Checking {name} output') for rel in outputs}
             completed[name]={'hashes':hashes,'seconds':time.monotonic()-began};save()
         ffmpeg=config['ffmpeg'];here=Path(__file__).parent
+        input_source=source
+        import_report={'sourceMode':'original','dolbyVisionPreserved':False,'videoReencoded':False}
+        if p['sourceMode']=='hdr10-base':
+            input_source=work/'hdr10_base.mp4'
+            def prepare_base():
+                require_dovi_filter(ffmpeg)
+                command=hdr10_copy_command(ffmpeg,source,input_source,video_index=media.get('videoStreamIndex'))
+                process(command,'Preparing HDR10-compatible base',log,duration=media['duration'])
+                copied=probe(config,input_source)
+                proof=verify_hdr10_copy(config,source,input_source,media,copied)
+                atomic_json(work/'hdr10_base.json',proof)
+            stage('Preparing HDR10 base',['hdr10_base.mp4','hdr10_base.json'],[],prepare_base)
+            import_report=json.loads((work/'hdr10_base.json').read_text())
         prepared=work/'prepared.mp4';reference=work/'smooth60.mp4' if smooth else prepared
         vf=f"scale=w='trunc(min({capabilities['maxWidth']},iw)/2)*2':h=-2,setsar=1,fps={media['rate']}"
         codec='libx264' if backend in ('cpu','mps','rocm') else 'hevc_nvenc' if hdr else 'h264_nvenc';fmt='p010le' if hdr else 'yuv420p'
         encoding=['-preset','medium','-crf','18','-threads','2'] if backend in ('cpu','mps','rocm') else ['-preset','p6','-rc','constqp','-qp','16']
-        prepare=[ffmpeg,'-hide_banner','-nostdin','-n','-ss',str(p['start']),*(['-hwaccel','cuda'] if backend=='cuda' else []),'-i',str(source),'-t',str(p['seconds']),
-            '-map','0:v:0','-map','0:a:0?','-vf',vf,'-c:v',codec,*encoding,'-pix_fmt',fmt,
+        audio=audio_map(request,media,remuxed=p['sourceMode']=='hdr10-base')
+        video_map='0:v:0' if p['sourceMode']=='hdr10-base' or media.get('videoStreamIndex') is None else f"0:{media['videoStreamIndex']}"
+        audio_args=['-map',audio] if audio else ['-an']
+        selected=p['selectedAudio']
+        audio_metadata=(['-metadata:s:a:0','language='+selected['language'],
+                        '-metadata:s:a:0','title='+selected['title'],
+                        '-metadata:s:a:0','handler_name='+(selected['title'] or selected['language'])] if selected else [])
+        prepare=[ffmpeg,'-hide_banner','-nostdin','-n','-ss',str(p['start']),*(['-hwaccel','cuda'] if backend=='cuda' else []),'-i',str(input_source),'-t',str(p['seconds']),
+            '-map',video_map,*audio_args,'-vf',vf,'-c:v',codec,*encoding,'-pix_fmt',fmt,
             *(['-profile:v','main10','-tag:v','hvc1'] if hdr else []),'-c:a','aac','-b:a','256k','-ac','2',
-            '-movflags','+faststart','-progress','pipe:1','-nostats',str(prepared)]
+            *audio_metadata,'-movflags','+faststart','-progress','pipe:1','-nostats',str(prepared)]
         stage('Preparing video',['prepared.mp4'],[],lambda:process(prepare,'Preparing HDR10 video' if hdr else 'Preparing SDR video',log,duration=p['seconds']))
         prepared_meta=probe(config,prepared)
         if hdr:
             from hdr_trial import hdr_params
-            if hdr_params(prepared,config['ffprobe'])!=hdr_params(source,config['ffprobe']):raise ValueError('Preparation did not retain HDR10 metadata.')
+            if hdr_params(prepared,config['ffprobe'])!=hdr_params(source,config['ffprobe'],stream_index=media.get('videoStreamIndex')):raise ValueError('Preparation did not retain HDR10 metadata.')
         env=dict(os.environ,NUNIF_HOME=config['cache'],HF_HOME=str(Path(config['cache'])/'huggingface'),TORCH_HOME=str(Path(config['cache'])/'torch'),PYTHONNOUSERSITE='1',PYTHONUNBUFFERED='1')
         if backend in ('cpu','mps','rocm'):env.update(OMP_NUM_THREADS='2',MKL_NUM_THREADS='2',VECLIB_MAXIMUM_THREADS='2',CINEVERSE_PROCESSING_BACKEND=backend)
         if backend in ('cpu','mps'):env['CUDA_VISIBLE_DEVICES']=''
@@ -257,7 +285,8 @@ def run(config,request):
             quality=verify_edges(reference,final,height,hdr)
             if source.stat().st_size!=source_stat.st_size or identity(source,not request.get('preview'))!=current:raise RuntimeError('Source integrity check changed')
             atomic_json(work/'verification.json',{'reference':a,'outputTimeline':b,'preparedAudioPreserved':True,'quality':quality,
-                'HDR':hdr,'sourceIntegrity':current,'sourceCheckPassed':True,'stereoMetadata':output_meta})
+                'HDR':hdr,'sourceIntegrity':current,'sourceCheckPassed':True,'stereoMetadata':output_meta,
+                'sourceImport':import_report,'selectedAudio':selected})
         stage('Verifying output',['verification.json'],[],verify)
         verified=json.loads((work/'verification.json').read_text())
         safe=''.join(c if c.isalnum() or c in ' .-_' else '_' for c in source.stem)[:65]
@@ -266,7 +295,7 @@ def run(config,request):
         destination=directory/name
         report={**verified,'source':str(source),'output':str(destination),'outputSha256':hash_file(final,'Checking final export'),
             'request':clean_request,'gpu':capabilities['gpu'],'backend':backend,'pipeline':state['pipeline'],'checkpointedStages':completed,'reusedStages':reused,
-            'log':str(log),'limitations':['First audio track is AAC stereo; subtitles/additional tracks omitted.',
+            'log':str(log),'limitations':['The selected audio track is AAC stereo; subtitles/additional tracks omitted.',
                 'Explicit black compatibility margins retain all image pixels.','Interrupted stages restart; completed verified stages can be resumed.']}
         if smooth:report['limitations'].append('60 FPS motion is AI-generated with cut guards; artifacts remain possible.')
         if backend in ('cpu','mps','rocm'):
@@ -274,13 +303,14 @@ def run(config,request):
                 ('Mac uses lower process priority and library thread limits, not a hard CPU-core affinity limit.' if sys.platform=='darwin' else 'CPU compatibility is limited to two logical CPU cores.'))
         if backend=='rocm':report['limitations'].append('Experimental AMD ROCm inference, not validated on physical AMD hardware. Software decode/encode; no AMF, NVENC, HDR or RIFE.')
         if method=='forward_inpaint':report['limitations'].append('Neural gap filling invents disoccluded texture and may soften or flicker. It is not recovered footage.')
+        if p['sourceMode']=='hdr10-base':report['limitations'].append('HDR10-compatible base used. Dolby Vision metadata was removed from a temporary copy; Dolby Vision is not preserved.')
         if destination.exists():
             if hash_file(destination)!=report['outputSha256']:raise FileExistsError('A different export exists at the destination')
         else:os.link(final,destination)
         atomic_json(destination.with_suffix('.json'),report)
         state['status']='complete';state['output']=str(destination);save()
         # Publication succeeded: remove only known large intermediates in this job directory.
-        for rel in ('prepared.mp4','smooth60.mp4','stereo.mp4','stereo_hdr.mp4','verified.mp4'):
+        for rel in ('hdr10_base.mp4','prepared.mp4','smooth60.mp4','stereo.mp4','stereo_hdr.mp4','verified.mp4'):
             path=work/rel
             if path.is_file():path.unlink()
         emit('complete',output=str(destination),report=str(destination.with_suffix('.json')),log=str(log),

@@ -739,6 +739,40 @@ footer i {
   color: #b7dabf;
   line-height: 1.5;
 }
+.import-options {
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid #465d4e;
+  border-radius: 7px;
+  background: #17231e;
+}
+.import-consent {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.import-consent input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  flex: 0 0 auto;
+  accent-color: #b4d9c0;
+}
+.import-options .hint:last-child,
+.import-options .warning:last-child {
+  margin-bottom: 0;
+}
+.audio-options {
+  margin-top: 14px;
+}
+.audio-options select {
+  width: 100%;
+  min-width: 0;
+  font-size: 11px;
+}
 .preflight {
   margin-top: 17px;
   padding: 12px;

@@ -43,6 +43,15 @@ type Settings = {
   thermalMode?: "required" | "gpu" | "macos";
   backend?: "auto" | "cuda" | "cpu" | "mps" | "rocm";
 };
+type AudioTrack = {
+  index: number;
+  language: string;
+  title: string;
+  codec: string;
+  channels: number;
+  default: boolean;
+};
+type SourceMode = "original" | "hdr10-base";
 type Media = {
   path: string;
   width: number;
@@ -51,6 +60,10 @@ type Media = {
   duration: number;
   hdr: boolean;
   hasAudio: boolean;
+  dolbyVision?: boolean;
+  dolbyVisionProfile?: number | null;
+  hdr10BaseCompatible?: boolean;
+  audioTracks?: AudioTrack[];
 };
 type Plan = {
   spaceBudgetBytes: number;
@@ -60,6 +73,8 @@ type Plan = {
   estimatedSecondsHigh: number | null;
   outputEstimateBytesLow: number;
   outputEstimateBytesHigh: number;
+  sourceMode?: SourceMode;
+  selectedAudio?: AudioTrack | null;
 };
 type SavedJob = {
   path: string;
@@ -154,6 +169,36 @@ export const duration = (s: number) =>
         .toString()
         .padStart(2, "0")}`;
 const basename = (p: string) => p.split(/[\\/]/).pop() || p;
+const audioLabel = (track: AudioTrack) => {
+  const languages: Record<string, string> = {
+    eng: "English",
+    jpn: "Japanese",
+    jap: "Japanese",
+    spa: "Spanish",
+    por: "Portuguese",
+    fra: "French",
+    fre: "French",
+    ita: "Italian",
+    deu: "German",
+    ger: "German",
+    kor: "Korean",
+    zho: "Chinese",
+    chi: "Chinese",
+    und: "Unspecified language",
+  };
+  const language =
+    languages[track.language?.toLowerCase()] ||
+    track.language ||
+    "Unspecified language";
+  return [
+    language,
+    track.title,
+    track.codec?.toUpperCase(),
+    track.channels ? `${track.channels} ch` : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+};
 
 export function App() {
   const [settings, setSettings] = useState<Settings>(empty),
@@ -180,6 +225,8 @@ export function App() {
   const [media, setMedia] = useState<Media | null>(null),
     [path, setPath] = useState(""),
     [probing, setProbing] = useState(false);
+  const [sourceMode, setSourceMode] = useState<SourceMode>("original");
+  const [audioTrackIndex, setAudioTrackIndex] = useState<number | null>(null);
   const [strength, setStrength] = useState(1.5),
     [stereoMethod, setStereoMethod] = useState<StereoMethod>("forward_inpaint"),
     [fpsMode, setFpsMode] = useState("60");
@@ -200,6 +247,21 @@ export function App() {
     [now, setNow] = useState(Date.now());
   const native = isTauri(),
     videoRef = useRef<HTMLVideoElement>(null);
+  const mediaGeneration = useRef(0);
+  const mediaSettingsQueue = useRef<Promise<void>>(Promise.resolve());
+  const pendingResumeGeneration = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      mediaGeneration.current += 1;
+    },
+    [],
+  );
+  const importBlocked =
+    !!media?.dolbyVision &&
+    (!media.hdr10BaseCompatible || sourceMode !== "hdr10-base");
+  const selectedAudio = media?.audioTracks?.find(
+    (track) => track.index === audioTrackIndex,
+  );
   const setFailure = (e: unknown) => setError(String(e));
   async function check(s: Settings) {
     setChecking(true);
@@ -219,6 +281,7 @@ export function App() {
   }
   async function loadVideo(p: string, s = settings) {
     if (busy) return;
+    const generation = ++mediaGeneration.current;
     setPath(p);
     setError("");
     setPlayerError(false);
@@ -226,18 +289,34 @@ export function App() {
     setResult(null);
     setView("original");
     setMedia(null);
+    setSourceMode("original");
+    setAudioTrackIndex(null);
+    setPlan(null);
     setStart(0);
     try {
-      setMedia(await invoke("probe_media", { settings: s, path: p }));
+      const probed = await invoke<Media>("probe_media", {
+        settings: s,
+        path: p,
+      });
+      if (generation !== mediaGeneration.current) return;
+      setMedia(probed);
+      setAudioTrackIndex(probed.audioTracks?.[0]?.index ?? null);
       if (s.lastVideo !== p) {
-        const recent = { ...s, lastVideo: p };
-        setSettings(recent);
-        await invoke("save_settings", { settings: recent });
+        // Serialize last-video writes. A write already in flight may finish
+        // after another import starts; the latest import must persist last.
+        const saveRecent = mediaSettingsQueue.current.then(async () => {
+          if (generation !== mediaGeneration.current) return;
+          const recent = { ...s, lastVideo: p };
+          setSettings(recent);
+          await invoke("save_settings", { settings: recent });
+        });
+        mediaSettingsQueue.current = saveRecent.catch(() => {});
+        await saveRecent;
       }
     } catch (e) {
-      setFailure(e);
+      if (generation === mediaGeneration.current) setFailure(e);
     } finally {
-      setProbing(false);
+      if (generation === mediaGeneration.current) setProbing(false);
     }
   }
   useEffect(() => {
@@ -403,9 +482,16 @@ export function App() {
       .catch(setFailure);
   }, [settings.outputDir, busy]);
   useEffect(() => {
-    if (!media || !settings.outputDir || busy || !engine?.ready) return;
-    let current = true;
     setPlan(null);
+    if (
+      !media ||
+      !settings.outputDir ||
+      busy ||
+      !engine?.ready ||
+      importBlocked
+    )
+      return;
+    let current = true;
     const timer = setTimeout(() => {
       invoke<Plan>("plan_conversion", {
         settings: { ...settings, resolvedBackend: engine?.backend },
@@ -415,6 +501,8 @@ export function App() {
           strength,
           stereoMethod,
           fpsMode,
+          sourceMode,
+          audioTrackIndex,
           preview: false,
         },
       })
@@ -430,11 +518,14 @@ export function App() {
       clearTimeout(timer);
     };
   }, [
-    media?.path,
+    media,
     settings.outputDir,
     strength,
     stereoMethod,
     fpsMode,
+    sourceMode,
+    audioTrackIndex,
+    importBlocked,
     engine?.backend,
     engine?.ready,
     busy,
@@ -649,7 +740,7 @@ export function App() {
     }
   }
   async function launch(preview: boolean) {
-    if (!media) return;
+    if (!media || !ready || (!preview && !fullReady)) return;
     setError("");
     setBusy(true);
     setCancelling(false);
@@ -674,6 +765,8 @@ export function App() {
           strength,
           stereoMethod,
           fpsMode,
+          sourceMode,
+          audioTrackIndex,
           preview,
           previewStart: start,
           previewSeconds: length,
@@ -685,6 +778,11 @@ export function App() {
     }
   }
   async function resume(job: SavedJob) {
+    if (busy || setupBusy || !engine?.ready || !protectionReady || job.running)
+      return;
+    const generation = ++mediaGeneration.current;
+    pendingResumeGeneration.current = generation;
+    setProbing(false);
     setError("");
     setBusy(true);
     setCancelling(false);
@@ -696,6 +794,53 @@ export function App() {
     setStartedAt(Date.now());
     setNow(Date.now());
     try {
+      const source = String(job.request.source || job.source);
+      const probed = await invoke<Media>("probe_media", {
+        settings,
+        path: source,
+      });
+      if (generation !== mediaGeneration.current) return;
+      if (
+        probed.dolbyVision &&
+        (!probed.hdr10BaseCompatible || job.request.sourceMode !== "hdr10-base")
+      ) {
+        throw new Error(
+          "This saved Dolby Vision job cannot use a verified HDR10 base. Choose an HDR10 or SDR source.",
+        );
+      }
+      if (
+        typeof job.request.audioTrackIndex === "number" &&
+        probed.audioTracks &&
+        !probed.audioTracks.some(
+          (track) => track.index === job.request.audioTrackIndex,
+        )
+      ) {
+        throw new Error(
+          "The saved audio track is no longer available in this source.",
+        );
+      }
+      setMedia(probed);
+      setPath(source);
+      setSourceMode(
+        job.request.sourceMode === "hdr10-base" ? "hdr10-base" : "original",
+      );
+      setAudioTrackIndex(
+        typeof job.request.audioTrackIndex === "number"
+          ? job.request.audioTrackIndex
+          : (probed.audioTracks?.[0]?.index ?? null),
+      );
+      setStrength(Number(job.request.strength ?? 1.5));
+      setStereoMethod(
+        job.request.stereoMethod === "row_flow_v3"
+          ? "row_flow_v3"
+          : "forward_inpaint",
+      );
+      setFpsMode(job.request.fpsMode === "60" ? "60" : "original");
+      setStart(Number(job.request.previewStart ?? 0));
+      setLength(Number(job.request.previewSeconds ?? 10));
+      setResult(null);
+      setView("original");
+      pendingResumeGeneration.current = null;
       await invoke("start_job", {
         settings: {
           ...settings,
@@ -706,11 +851,25 @@ export function App() {
         request: { ...job.request, resumeJob: job.path },
       });
     } catch (e) {
-      setBusy(false);
-      setFailure(e);
+      if (generation === mediaGeneration.current) {
+        pendingResumeGeneration.current = null;
+        setBusy(false);
+        setFailure(e);
+      }
     }
   }
   async function cancel() {
+    if (pendingResumeGeneration.current !== null) {
+      mediaGeneration.current += 1;
+      pendingResumeGeneration.current = null;
+      setBusy(false);
+      setCancelling(false);
+      setProgress({
+        type: "cancelled",
+        message: "Recovery cancelled before conversion started.",
+      });
+      return;
+    }
     setCancelling(true);
     try {
       await invoke("cancel_job");
@@ -745,6 +904,7 @@ export function App() {
     !busy &&
     !setupBusy &&
     !probing &&
+    !importBlocked &&
     (fpsMode !== "60" || (engine.rifeReady && engine.supports60 !== false)) &&
     (!media.hdr || engine.supportsHDR !== false) &&
     (stereoMethod !== "forward_inpaint" || engine.neuralReady !== false);
@@ -784,7 +944,7 @@ export function App() {
             <h1>Bring depth to movie night.</h1>
             <p>Turn a 2D video into a stereo film, ready for your headset.</p>
           </div>
-          <span className="version">PREVIEW · 0.8.1</span>
+          <span className="version">PREVIEW · 0.9.0</span>
         </div>
         {!native && (
           <div className="notice">
@@ -907,13 +1067,95 @@ export function App() {
             </details>
             {media && (
               <p className="source-format">
-                {media.hdr
-                  ? engine?.supportsHDR === false
-                    ? "HDR10 requires NVIDIA mode"
-                    : "HDR10 is preserved · 10-bit HEVC"
-                  : "SDR source · H.264 export"}{" "}
+                {media.dolbyVision
+                  ? `Dolby Vision${media.dolbyVisionProfile != null ? ` profile ${media.dolbyVisionProfile}` : ""} detected`
+                  : media.hdr
+                    ? engine?.supportsHDR === false
+                      ? "HDR10 requires NVIDIA mode"
+                      : "HDR10 is preserved · 10-bit HEVC"
+                    : "SDR source · H.264 export"}{" "}
                 · {engine?.codec || "NVIDIA NVENC"}
               </p>
+            )}
+            {media?.dolbyVision && (
+              <div className="import-options" aria-label="Dolby Vision import">
+                {media.hdr10BaseCompatible ? (
+                  <>
+                    <label className="import-consent" htmlFor="hdr10-base">
+                      <input
+                        id="hdr10-base"
+                        type="checkbox"
+                        checked={sourceMode === "hdr10-base"}
+                        disabled={busy || engine?.supportsHDR === false}
+                        aria-describedby="hdr10-base-description"
+                        onChange={(event) => {
+                          setSourceMode(
+                            event.target.checked ? "hdr10-base" : "original",
+                          );
+                          setPlan(null);
+                          setError("");
+                        }}
+                      />
+                      Use HDR10 base
+                    </label>
+                    <p id="hdr10-base-description" className="hint">
+                      A compatible HDR10 base was detected. Conversion prepares
+                      a separate copy and removes Dolby Vision metadata. The
+                      output is HDR10; your original stays untouched.
+                    </p>
+                    {engine?.supportsHDR === false ? (
+                      <p className="warning">HDR10 requires NVIDIA mode.</p>
+                    ) : sourceMode !== "hdr10-base" ? (
+                      <p className="hint">
+                        Select Use HDR10 base to enable conversion.
+                      </p>
+                    ) : null}
+                  </>
+                ) : (
+                  <p className="warning">
+                    This Dolby Vision file has no verified HDR10-compatible
+                    base. Choose an HDR10 or SDR source.
+                  </p>
+                )}
+              </div>
+            )}
+            {media && (
+              <div className="audio-options">
+                {media.audioTracks && media.audioTracks.length > 0 ? (
+                  <>
+                    <label className="field-label" htmlFor="audio-track">
+                      Audio track
+                    </label>
+                    <select
+                      id="audio-track"
+                      aria-label="Audio track"
+                      value={audioTrackIndex ?? media.audioTracks[0].index}
+                      disabled={busy}
+                      onChange={(event) => {
+                        setAudioTrackIndex(Number(event.target.value));
+                        setPlan(null);
+                        setError("");
+                      }}
+                    >
+                      {media.audioTracks.map((track, index) => (
+                        <option key={track.index} value={track.index}>
+                          {index + 1}. {audioLabel(track)}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="hint">
+                      The selected track is exported as AAC stereo. Subtitles
+                      are omitted.
+                    </p>
+                  </>
+                ) : (
+                  <p className="hint">
+                    {media.hasAudio
+                      ? "The first audio track is exported as AAC stereo. Subtitles are omitted."
+                      : "This video has no audio track."}
+                  </p>
+                )}
+              </div>
             )}
             <div className="section-heading">
               <span className="step">02</span>
@@ -1023,8 +1265,10 @@ export function App() {
               <span>MP4 · AAC stereo</span>
             </div>
             <p className="hint">
-              Up to {engine?.maxWidth || 1920} pixels per eye. First audio
-              track; subtitles omitted.
+              Up to {engine?.maxWidth || 1920} pixels per eye.{" "}
+              {media?.hasAudio
+                ? `${selectedAudio ? audioLabel(selectedAudio) : "First audio track"} → AAC stereo; subtitles omitted.`
+                : "No audio selected; subtitles omitted."}
             </p>
             <p className="safety">
               <ShieldCheck size={15} /> Your original file stays untouched.
@@ -1417,7 +1661,8 @@ export function App() {
             <h2>Recover an interrupted conversion</h2>
             <p className="hint">
               Completed stages are reused with their saved depth and gap
-              filling. The interrupted stage restarts.
+              filling, HDR mode and audio selection. The interrupted stage
+              restarts.
             </p>
             {savedJobs.map((job) => (
               <div key={job.path} className="recovery-row">
@@ -1427,6 +1672,12 @@ export function App() {
                   {job.request.stereoMethod === "forward_inpaint"
                     ? "neural"
                     : "previous fast method"}
+                  {job.request.sourceMode === "hdr10-base"
+                    ? " · HDR10 base"
+                    : ""}
+                  {typeof job.request.audioTrackIndex === "number"
+                    ? ` · audio stream ${job.request.audioTrackIndex}`
+                    : " · first audio track"}
                 </span>
                 <button
                   disabled={job.running || !engine || !protectionReady}

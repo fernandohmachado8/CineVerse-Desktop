@@ -1,7 +1,9 @@
 import importlib.util
 from pathlib import Path
+import sys
 import unittest
 
+sys.path.insert(0,str(Path(__file__).parents[1]/'worker'))
 spec=importlib.util.spec_from_file_location('worker',Path(__file__).parents[1]/'worker/worker.py')
 worker=importlib.util.module_from_spec(spec);spec.loader.exec_module(worker)
 

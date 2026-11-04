@@ -1,8 +1,8 @@
-# First run with automatic setup (0.6 preview)
+# First run with automatic setup
 
 Install and open **CineVerse Setup Preview**. In Engine settings keep Automatic, choose the engine drive if desired, acknowledge the component downloads and click **Install engine automatically**. All dependency paths are saved after validation. No system Python or Git is needed. Enable CPU sensing before conversion; if PawnIO is missing, open the original signed driver installer from the protection panel and handle its normal Windows approval. See [automatic setup](AUTOMATIC_SETUP.md).
 
-# CineVerse Desktop 0.4
+# CineVerse Desktop Import Preview 0.9
 
 Windows desktop converter with integrated CPU/GPU temperature supervision and bounded local engine discovery for this configured NVIDIA PC: source HDR10 preservation, preferred depth 1.5 with neural gap filling and optional true 60 FPS interpolation, NVENC export, preview, and recovery of completed stages. Earlier reconstruction experiments remain separate from this standalone desktop repository.
 
@@ -10,7 +10,7 @@ Windows desktop converter with integrated CPU/GPU temperature supervision and bo
 
 1. Open CineVerse Desktop. The local engine is detected from its portable settings or the known `CineVerse/engine.json` path on a fixed drive. The Engine settings screen offers **Find installed engine** and **Locate engine folder**, an eight-component found/missing checklist, and collapsed **Advanced paths**. Valid custom paths are preserved; missing or stale paths can be repaired from the selected installation. No machine-specific paths are committed.
 2. Click **Enable CPU sensor**, approve the read-only helper's Windows administrator prompt, and wait for fresh CPU and GPU readings and **Ready to arm**. This is required again after closing/reopening the app. The default is **CPU + GPU**; GPU-only mode requires an explicit selection and shows that CPU temperature is unmonitored. No conversion starts during setup.
-3. Drop/select a local video, or paste its path. HDR10 sources retain BT.2020/PQ and 10-bit HEVC. SDR sources produce H.264 SDR.
+3. Drop/select a local video, or paste its path. HDR10 sources retain BT.2020/PQ and 10-bit HEVC. SDR sources produce H.264 SDR. For a verified compatible Dolby Vision source, explicitly select **Use HDR10 base** to remove Dolby Vision metadata while retaining its HDR10 picture. Other Dolby Vision profiles remain blocked. Choose an **Audio track** by language/title; the first audio track is selected initially. Files without audio produce a silent export. See [import and audio selection](IMPORT_AND_AUDIO.md).
 4. Depth starts at **1.5**, gap filling at **Neural**, motion at **60 FPS**. Fast (the previous gap-filling method) and adjustable strength remain available. Original FPS remains available. These preferences reflect local VR tests, not a universal comfort setting.
 5. Choose a short preview and start position. A three-minute quality-test option is available. **Generate preview** always processes only that window; **Convert full video** processes the whole input independently of preview settings.
 6. Check the full-video workspace budget, free space, approximate processing time and output-size range. Estimates vary with footage. Large source videos may require hours.
@@ -39,9 +39,9 @@ The standalone watchdog scripts in `thermal/` remain available for legacy jobs; 
 
 ## Fidelity and compatibility
 
-HDR10 (10-bit BT.2020/PQ) is preserved through floating-point HDR interpolation and Main10 encoding. HLG, Dolby Vision preservation, anamorphic inputs and rates outside 1–60 FPS are rejected. RIFE 4.25 is experimental on HDR PQ imagery; it is not an HDR-specific model. Intermediate motion and the right eye are synthesized. Scene-cut guards reduce blending; missed cuts, hands, hair and occlusions still need visual review.
+HDR10 (10-bit BT.2020/PQ) is preserved through floating-point HDR interpolation and Main10 encoding. Dolby Vision Profile 8 with a verified HDR10-compatible base can be processed only after explicitly selecting **Use HDR10 base**. The temporary copy removes Dolby Vision metadata; this is HDR10 output, not Dolby Vision preservation. HLG, other Dolby Vision profiles, anamorphic inputs and rates outside 1–60 FPS are rejected. RIFE 4.25 is experimental on HDR PQ imagery; it is not an HDR-specific model. Intermediate motion and the right eye are synthesized. Scene-cut guards reduce blending; missed cuts, hands, hair and occlusions still need visual review.
 
-The video is normalized to the source average frame rate and scaled to at most 1920 pixels per eye. The first audio stream is downmixed to AAC stereo; additional audio tracks and subtitles are omitted. This is not bit-identical source preservation or a walkable 360-degree scene.
+The video is normalized to the source average frame rate and scaled to at most 1920 pixels per eye. The selected audio stream is downmixed to AAC stereo; additional audio tracks and subtitles are omitted. The chosen source track is recorded in the plan and output report. This is not bit-identical source preservation or a walkable 360-degree scene.
 
 Before the final NVENC encode, explicit black compatibility margins align the frame height to 64 rows. The tested 804-row movie image becomes an 832-row frame with 14 black rows above/below; no movie rows are cropped or resized by this padding. The padding is applied before final encoding and avoids a diagnostic re-encode. HDR mastering/display metadata is retained in the elementary HEVC stream, not just the container.
 
@@ -55,11 +55,11 @@ Recovery is **between stages**, not halfway through a stage. A cancelled multi-h
 
 The full conversion uses a complete source SHA-256 check before/after. To keep previews fast on large source movies, previews use sampled SHA-256 of start/middle/end plus file size and modification time; reports name that method explicitly. Every final output frame is decoded with NVIDIA hardware to verify frame count, dimensions and timestamps. Prepared audio hashes, HDR metadata, source-eye detail samples and black margins are also checked before publishing the unique finished MP4.
 
-Temporary-space budgets are conservative: HDR/60 FPS currently reserves 24 MiB per second of selected footage, including intermediate copies and safety margin. The whole-movie action is disabled when the preflight budget does not fit. A disk-full or GPU failure leaves completed checkpoints recoverable. Final reports distinguish estimates from measured results.
+Temporary-space budgets are conservative: HDR/60 FPS currently reserves 24 MiB per second of selected footage, including intermediate copies and safety margin. HDR10-base preparation additionally reserves room for a complete video/audio copy of the input, including for previews. The whole-movie action is disabled when the preflight budget does not fit. A disk-full or GPU failure leaves completed checkpoints recoverable. Final reports distinguish estimates from measured results.
 
 ## Local engine and packaging
 
-The app bundles the interface and CineVerse Python adapters. It includes the supervisor and sensor-helper scripts, but uses the separately installed LibreHardwareMonitor/PawnIO sensor runtime, CUDA Python, official iw3, official RIFE 4.25, model cache, FFmpeg and FFprobe on this PC. It is not yet a self-provisioning clean-machine installer. The portable build keeps `portable.json` next to its executable to avoid AppData launch-context differences. Installed builds fall back to the per-user Tauri configuration and known local engine manifests on fixed drives. Settings contain local paths, never service credentials.
+The app bundles the interface, CineVerse Python adapters, supervisor and sensor-helper scripts. Automatic setup provisions a private Python runtime, processing tools and official model files for the selected supported profile; normal users do not configure their paths. The read-only sensor helper and signed driver still require normal Windows approval. A configured local engine can also be reused. The portable build keeps `portable.json` next to its executable to avoid AppData launch-context differences. Installed builds fall back to the per-user Tauri configuration and known local engine manifests on fixed drives. Settings contain local paths, never service credentials. Setup has not been certified on every clean Windows installation.
 
 The shared engine configuration points to Python, nunif/iw3, FFmpeg/FFprobe, model cache, Practical-RIFE, official RIFE `train_log`, and an output folder. The source movie and models are not included in the repository or interface installer. Original dependencies and weights retain their licenses; see [third-party notices](../THIRD_PARTY_NOTICES.md).
 

@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "CineVerse Setup Preview",
-  "version": "0.8.1",
-  "identifier": "com.cineverse.desktop.setup",
+  "productName": "CineVerse Import Preview",
+  "version": "0.9.0",
+  "identifier": "com.cineverse.desktop.importpreview",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:5190",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "CineVerse Setup Preview",
+        "title": "CineVerse Import Preview",
         "width": 1220,
         "height": 860,
         "minWidth": 940,
@@ -41,6 +41,7 @@
       "../worker/iw3_export.py": "worker/iw3_export.py",
       "../worker/pipeline.py": "worker/pipeline.py",
       "../worker/worker.py": "worker/worker.py",
+      "../worker/media_import.py": "worker/media_import.py",
       "../worker/protection.py": "worker/protection.py",
       "../worker/engine_setup.py": "worker/engine_setup.py",
       "../worker/cpu_session.ps1": "worker/cpu_session.ps1",

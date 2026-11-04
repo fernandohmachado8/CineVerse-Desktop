@@ -12,6 +12,7 @@ import time
 import traceback
 import uuid
 from fractions import Fraction
+from media_import import source_details, source_mode, selected_audio
 
 FLAGS = getattr(subprocess, 'CREATE_NO_WINDOW', 0)
 DEFAULT_STRENGTH = 1.5
@@ -51,7 +52,7 @@ def probe(config, path):
             'hdr': video.get('color_transfer') in ('smpte2084', 'arib-std-b67'),
             'transfer':video.get('color_transfer'), 'primaries':video.get('color_primaries'),
             'pixelFormat':video.get('pix_fmt',''), 'frames':int(video.get('nb_frames',0) or 0),
-            'dolbyVision':any('dovi' in s.get('side_data_type','').lower() for s in video.get('side_data_list',[])),
+            **source_details(video, info['streams']),
             'sar': video.get('sample_aspect_ratio', '1:1'),
             'hasAudio': any(s['codec_type'] == 'audio' for s in info['streams']),
             'bytes': path.stat().st_size}
@@ -77,6 +78,8 @@ def check(config, gpu=True):
 
 def validate(request, media):
     stereo_method(request)
+    source_mode(request, media)
+    selected_audio(request, media)
     strength = float(request.get('strength', 3 if request.get('resumeJob') else DEFAULT_STRENGTH))
     if not math.isfinite(strength) or not 0 <= strength <= 5:
         raise ValueError('Depth strength must be between 0 and 5.')
@@ -85,7 +88,6 @@ def validate(request, media):
     if media['hdr'] and (media.get('transfer')!='smpte2084' or media.get('primaries')!='bt2020'
                          or '10' not in media.get('pixelFormat','') and '12' not in media.get('pixelFormat','')):
         raise ValueError('HDR10 (10-bit BT.2020/PQ) is supported. HLG and unidentified HDR formats are not supported.')
-    if media.get('dolbyVision'):raise ValueError('Dolby Vision preservation is not supported. Choose an HDR10 or SDR source.')
     if not math.isfinite(media['fps']) or not math.isfinite(media['duration']) or not 1 <= media['fps'] <= 60 or media['duration'] <= 0:
         raise ValueError('This build supports finite videos at 1–60 FPS.')
     if media['sar'] not in ('1:1', 'N/A', '0:1'):
